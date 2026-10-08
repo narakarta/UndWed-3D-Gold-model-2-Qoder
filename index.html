@@ -1,0 +1,1749 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Undangan Pernikahan Rizky &amp; Anisa — Hutan Dongeng</title>
+<meta name="description" content="Undangan pernikahan Rizky & Anisa — Minggu, 20 Desember 2026. Taman hutan dongeng di waktu senja. Dengan hormat kami mengundang Anda.">
+<meta name="theme-color" content="#f6f3e9">
+<meta property="og:title" content="Undangan Pernikahan Rizky & Anisa">
+<meta property="og:description" content="Dengan hormat mengundang Bapak/Ibu/Saudara/i pada pernikahan kami — Minggu, 20 Desember 2026. Ketuk undangan interaktifnya ✨">
+<meta property="og:type" content="website">
+<meta property="og:image" content="og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="og.jpg">
+<!-- Setelah hosting: ganti og.jpg jadi URL ABSOLUT agar preview WhatsApp tampil, contoh: https://username.github.io/nama-repo/og.jpg -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Great+Vibes&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.min.js">
+<!--
+=== BACK END: GOOGLE SHEETS (APPS SCRIPT) ===
+1. Buat Google Sheet dengan 4 tab. Baris 1 = judul kolom:
+   - Tab "RSVP"     : Waktu | Nama | Status | Jumlah | Ucapan | Kunci Link
+   - Tab "Ucapan"   : Waktu | Nama | Status | Jumlah | Ucapan | Kunci Link
+   - Tab "Tamu"     : Waktu | Nama | Kunci Link | Kode
+   - Tab "Kehadiran": Waktu | Nama | Kunci Link | Kode | Metode
+2. Extensions > Apps Script, tempel kode di bawah ini (sama dengan file apps-script.gs).
+   Ganti ADMIN dengan nilai yang SAMA dengan C.adminKey di CONFIG (blok script dalam file ini).
+3. Deploy > New deployment > Web app — Execute as: Me, Who has access: Anyone.
+   Salin URL /exec lalu tempel ke C.sheetUrl di CONFIG.
+   Sebelum sheetUrl diisi, data RSVP/ucapan/tamu/check-in hanya tersimpan di browser sebagai uji coba.
+
+var ADMIN='ganti-kunci-ini';
+function out(t){return ContentService.createTextOutput(t)}
+function nk(s){return String(s).toLowerCase()}
+function sn(s){return String(s||'').toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'')}
+function doPost(e){
+  var d=JSON.parse(e.postData.contents), ss=SpreadsheetApp.getActive(), lock=LockService.getScriptLock();
+  lock.waitLock(10000);
+  try{
+    var tamu=ss.getSheetByName('Tamu'), tv=tamu.getDataRange().getValues(), i;
+    if(d.type=='guest'){
+      if(d.adminKey!==ADMIN) return out('forbidden');
+      for(i=1;i<tv.length;i++){ if(nk(tv[i][2])===nk(d.key)) return out('exists'); if(sn(tv[i][1])===sn(d.name)) return out('exists-name'); }
+      tamu.appendRow([new Date(),d.name,d.key,d.code]);
+      return out('ok');
+    }
+    if(d.type=='guests'){
+      if(d.adminKey!==ADMIN) return out('forbidden');
+      var list=d.list||[], added=[], dup=[], j;
+      for(i=0;i<list.length;i++){
+        var g=list[i], taken=false;
+        for(j=0;j<added.length;j++){ if(nk(added[j].key)===nk(g.key)){taken=true;break} }
+        if(!taken) for(j=1;j<tv.length;j++){ if(nk(tv[j][2])===nk(g.key)||sn(tv[j][1])===sn(g.name)){taken=true;break} }
+        if(taken){ dup.push(g.name); } else { tamu.appendRow([new Date(),g.name,g.key,g.code]); added.push(g); }
+      }
+      return out(JSON.stringify({status:'ok',added:added.length,dup:dup}));
+    }
+    if(d.type=='checkin'){
+      if(d.adminKey!==ADMIN) return out('forbidden');
+      var gname='', gkey='';
+      for(i=1;i<tv.length;i++){ if(nk(tv[i][2])===nk(d.key)){gname=tv[i][1];gkey=tv[i][2];break} }
+      if(!gname) return out('notfound');
+      var kh=ss.getSheetByName('Kehadiran'), kv=kh.getDataRange().getValues();
+      for(i=1;i<kv.length;i++){ if(nk(kv[i][2])===nk(gkey)) return out('dup'); }
+      kh.appendRow([new Date(),gname,gkey,d.code||'',d.mode||'QR']);
+      return out('ok');
+    }
+    if(d.type=='admin'){
+      if(d.adminKey!==ADMIN) return out('forbidden');
+      var sname={rsvp:'RSVP',wish:'Ucapan',tamu:'Tamu',hadir:'Kehadiran'}[d.sheet];
+      var s0=ss.getSheetByName(sname), kc=(d.sheet=='tamu'||d.sheet=='hadir')?2:5;
+      var v0=s0.getDataRange().getValues(), r=0;
+      for(i=1;i<v0.length;i++){ if(nk(v0[i][kc])===nk(d.key)){r=i+1;break} }
+      if(!r) return out('notfound');
+      if(d.action=='delete'){ s0.deleteRow(r); return out('ok'); }
+      s0.getRange(r,2).setValue(d.name);
+      if(d.sheet=='rsvp') s0.getRange(r,3,1,2).setValues([[d.status,d.count]]);
+      if(d.sheet=='wish') s0.getRange(r,5).setValue(d.msg);
+      if(d.sheet=='tamu'&&d.code) s0.getRange(r,4).setValue(d.code);
+      return out('ok');
+    }
+    var valid=false, gn='', gk='';
+    for(i=1;i<tv.length;i++){ if(nk(tv[i][2])===nk(d.key)&&String(tv[i][3])===String(d.code)){valid=true;gn=tv[i][1];gk=tv[i][2];break} }
+    if(!valid) return out('invalid');
+    var sh=ss.getSheetByName(d.type=='rsvp'?'RSVP':'Ucapan');
+    var row=[new Date(),gn,d.status||'',d.count||'',d.msg||'',gk];
+    var v=sh.getDataRange().getValues(), idx=0;
+    for(i=1;i<v.length;i++){ if(nk(v[i][5])===nk(gk)){idx=i+1;break} }
+    if(idx){ if(!d.status) row[2]=v[idx-1][2]; if(!d.count) row[3]=v[idx-1][3]; if(!d.msg) row[4]=v[idx-1][4]; sh.getRange(idx,1,1,6).setValues([row]); } else sh.appendRow(row);
+    return out('ok');
+  } finally { lock.releaseLock(); }
+}
+function doGet(e){
+  var ss=SpreadsheetApp.getActive();
+  function r(n){return ss.getSheetByName(n).getDataRange().getValues().slice(1)}
+  var o={rsvp:r('RSVP'),wishes:r('Ucapan')};
+  if(e&&e.parameter&&e.parameter.admin===ADMIN){ o.tamu=r('Tamu'); o.kehadiran=r('Kehadiran'); }
+  return out(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+-->
+<style>
+:root{
+  --bg:#f6f3e9;--bg2:#e9eeda;--card:#fffdf7;--line:#ddd6bd;
+  --ink:#33301f;--ink2:#78704e;--gold:#c9a24b;--gold2:#e8d193;--gold3:#8f6f22;
+  --leaf:#5f8b46;--leaf2:#89b06a;--leaf3:#e2ebd2;
+  --wood:#8a5a35;--wood2:#b98a5c;--wood3:#63401f;--pink:#eec3c8;
+  --card2:#fffdf7;--sh:0 14px 34px rgba(60,72,38,.14);
+  --ph:linear-gradient(160deg,#e9eeda 0%,#f6efdd 55%,#e6d6b4 100%);
+}
+body.dark{
+  --bg:#131710;--bg2:#1a2113;--card:#1e2417;--line:#37402a;
+  --ink:#eef1e0;--ink2:#a9b393;--gold:#d9b667;--gold2:#f1dc9e;--gold3:#8a6a26;
+  --leaf:#7ea862;--leaf2:#a3c185;--leaf3:#27301c;
+  --wood:#a97a4e;--wood2:#c79a6b;--wood3:#7a5530;--pink:#c98f95;
+  --card2:#232a1b;--sh:0 14px 34px rgba(0,0,0,.55);
+  --ph:linear-gradient(160deg,#333d29 0%,#2a3220 55%,#202718 100%);
+}
+body[data-theme=senja]{--gold:#d08a45;--gold2:#f0c186;--gold3:#9c5a20;--leaf:#6f8b48;--leaf2:#93ad6c;--pink:#f0c8a0}
+body[data-theme=sakura]{--gold:#c96b7f;--gold2:#eeb6c2;--gold3:#964457;--leaf:#6f925c;--leaf2:#9dbb85;--pink:#f4c9d4}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:'Nunito',system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow-x:hidden;transition:background .4s,color .4s}
+body:not(.opened){overflow:hidden;height:100vh}
+img{max-width:100%;display:block}
+h1,h2,h3,h4{font-family:'Cormorant Garamond',serif;font-weight:600}
+.script{font-family:'Great Vibes',cursive;font-weight:400}
+.kicker{letter-spacing:.3em;text-transform:uppercase;font-size:.68rem;color:var(--ink2)}
+.lead{text-align:center;max-width:640px;margin:0 auto;color:var(--ink2);line-height:1.75}
+.hint-txt{text-align:center;color:var(--ink2);font-size:.85rem}
+.gbtn{display:inline-block;padding:13px 30px;border:none;border-radius:999px;background:linear-gradient(135deg,var(--leaf2),var(--leaf));color:#fff;font:inherit;font-weight:700;font-size:.92rem;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;box-shadow:0 8px 22px rgba(95,139,70,.4);transition:transform .25s;text-decoration:none}
+.gbtn:hover{transform:translateY(-2px)}
+.gbtn:disabled{opacity:.6;cursor:wait}
+.gbtn.wood{background:linear-gradient(135deg,var(--wood2),var(--wood));box-shadow:0 8px 22px rgba(138,90,53,.4)}
+/* ---------- COVER ---------- */
+#cover{position:fixed;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;background:radial-gradient(120% 92% at 50% 0%,#ffe6b4 0%,#f7bb7b 32%,#c47a4b 62%,#5d4530 100%);transition:opacity .9s,visibility .9s;overflow:hidden}
+#cover.hide{opacity:0;visibility:hidden;pointer-events:none}
+.cvr-frame{position:relative;z-index:3;max-width:420px;width:100%;border:2px solid var(--wood2);outline:1px solid var(--wood2);outline-offset:6px;border-radius:6px;padding:36px 26px;background:var(--card);box-shadow:0 24px 60px rgba(40,25,10,.4)}
+.cvr-frame .mono{font-family:'Cormorant Garamond',serif;font-size:2rem;color:var(--leaf);margin:10px 0 2px;letter-spacing:.24em}
+.cvr-frame .names{font-size:2.6rem;color:var(--ink);line-height:1.15}
+.cvr-frame .cvr-date{margin-top:8px;color:var(--ink2);letter-spacing:.14em;font-size:.9rem}
+.cvr-to{margin:24px 0 6px;border-top:1px dashed var(--line);padding-top:18px}
+.cvr-to p{font-size:.86rem;color:var(--ink2)}
+#guestName{font-size:1.9rem;color:var(--leaf);margin-top:4px;line-height:1.2}
+#openBtn{margin-top:18px}
+.cfly{position:absolute;width:5px;height:5px;border-radius:50%;background:#ffe9a8;box-shadow:0 0 12px 4px rgba(255,230,150,.75);animation:cfly 7s ease-in-out infinite;pointer-events:none}
+@keyframes cfly{0%,100%{transform:translate(0,0);opacity:.15}30%{opacity:1}55%{transform:translate(22px,-34px);opacity:.5}80%{transform:translate(-16px,-12px);opacity:.9}}
+.sil{position:absolute;left:0;right:0;bottom:0;pointer-events:none}
+.sil.s1{height:130px;background:#3c4a2a;opacity:.9;clip-path:polygon(0 100%,0 62%,4% 40%,8% 62%,12% 28%,16% 62%,22% 44%,26% 62%,30% 22%,36% 62%,40% 46%,46% 62%,52% 18%,58% 62%,62% 44%,68% 62%,72% 30%,78% 62%,84% 46%,88% 62%,94% 34%,100% 62%,100% 100%)}
+.sil.s2{height:84px;background:#26301c;clip-path:polygon(0 100%,0 70%,6% 50%,12% 70%,18% 40%,24% 70%,32% 56%,38% 70%,44% 34%,52% 70%,58% 52%,64% 70%,70% 40%,78% 70%,84% 56%,90% 70%,96% 48%,100% 66%,100% 100%)}
+/* ---------- TOMBOL MELAYANG & TOAST ---------- */
+.fbtn{position:fixed;z-index:800;width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;display:grid;place-items:center;box-shadow:var(--sh);font-size:1.1rem;transition:transform .25s}
+.fbtn:hover{transform:scale(1.08)}
+#darkBtn{top:14px;right:14px}
+#palBtn{top:14px;right:68px}
+#musicBtn{bottom:16px;left:16px}
+#musicBtn.on{background:linear-gradient(135deg,var(--leaf2),var(--leaf));color:#fff;border-color:var(--leaf)}
+#toTop{bottom:16px;right:16px;opacity:0;pointer-events:none}
+#toTop.show{opacity:1;pointer-events:auto}
+#palPop{position:fixed;top:68px;right:14px;z-index:805;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh);padding:10px 12px;display:none;gap:12px}
+#palPop.on{display:flex}
+.paldot{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
+.paldot[data-t=hutan]{background:linear-gradient(135deg,#8fbe6a,#4e7a3a)}
+.paldot[data-t=senja]{background:linear-gradient(135deg,#f2b06b,#c85f35)}
+.paldot[data-t=sakura]{background:linear-gradient(135deg,#f3c6d0,#c96b7f)}
+.paldot.sel{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,162,75,.3)}
+#toast{position:fixed;left:50%;bottom:78px;transform:translate(-50%,20px);z-index:950;background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:10px;opacity:0;transition:.3s;font-size:.9rem;max-width:88vw;text-align:center;pointer-events:none}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+/* ---------- HERO: TAMAN 3D ---------- */
+#hero{position:relative;height:100svh;min-height:620px;overflow:hidden;background:linear-gradient(#ffd9a2,#f5b06e 45%,#8f6a3f 78%,#4c3a26)}
+body.dark #hero{background:linear-gradient(#3a3f52,#2c2f33 50%,#191812)}
+#sceneWrap{position:absolute;inset:0}
+#scene{width:100%;height:100%;display:block;opacity:0;transition:opacity 1.2s;touch-action:pan-y;cursor:grab}
+#scene.drag{cursor:grabbing}
+body.has3d #scene{opacity:1}
+body.no3d #scene,body.no3d #loadChip{display:none}
+#loadChip{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:11px 22px;font-size:.85rem;color:var(--ink2);box-shadow:var(--sh);animation:cpulse 1.8s ease-in-out infinite;white-space:nowrap}
+@keyframes cpulse{50%{opacity:.55}}
+#heroUI{position:absolute;left:0;right:0;bottom:86px;z-index:6;text-align:center;pointer-events:none;padding:0 16px}
+#heroUI .kicker{color:#fff5df;text-shadow:0 2px 10px rgba(60,30,0,.55)}
+#heroUI h1{font-size:clamp(2.6rem,9vw,4.4rem);color:#fffaf0;line-height:1.08;text-shadow:0 4px 24px rgba(70,35,0,.55),0 1px 2px rgba(60,30,0,.5)}
+#heroUI .hero-date{margin-top:4px;color:#ffeecd;letter-spacing:.18em;font-size:clamp(.8rem,2.6vw,1rem);text-shadow:0 2px 10px rgba(60,30,0,.6)}
+#spHint{position:fixed;z-index:7;transform:translate(-50%,-130%);background:var(--card);border:1px solid var(--leaf2);color:var(--ink);padding:8px 15px;border-radius:999px;font-size:.78rem;font-weight:600;box-shadow:var(--sh);pointer-events:none;opacity:0;transition:opacity .35s;white-space:nowrap}
+#spHint.on{opacity:1;animation:bob2 2s ease-in-out infinite}
+@keyframes bob2{50%{transform:translate(-50%,-155%)}}
+#menuBtn{position:absolute;top:14px;left:14px;z-index:8;width:auto;padding:0 16px;border-radius:999px;overflow:hidden}
+.shint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);color:#fff3d8;font-size:.76rem;letter-spacing:.22em;text-transform:uppercase;animation:bob 2.2s ease-in-out infinite;white-space:nowrap;z-index:6;text-shadow:0 2px 8px rgba(60,30,0,.6);pointer-events:none}
+@keyframes bob{50%{transform:translate(-50%,8px)}}
+/* fallback tanpa 3D */
+#spFallback{position:absolute;inset:0;overflow:hidden;background:linear-gradient(#ffdcae,#f3ad6c 45%,#7d9a58 66%,#3e5430 100%)}
+#spFallback .hill{position:absolute;left:-10%;right:-10%;bottom:0;height:34%;background:radial-gradient(90% 100% at 50% 0%,#6f9450,#41603a)}
+#spFallback .tree{position:absolute;bottom:22%;width:0;height:0;border-left:46px solid transparent;border-right:46px solid transparent;border-bottom:150px solid #2f4a2a}
+#spFallback .tree.t2{border-bottom-color:#3a5a33;transform:scale(1.25)}
+#spFallback .tree.t3{border-bottom-color:#27401f;transform:scale(.85)}
+body.has3d #spFallback{display:none}
+/* ---------- PANEL MENU PETUNJUK ---------- */
+#menuPanel{position:fixed;inset:0;z-index:850;display:none}
+#menuPanel.on{display:block}
+#menuBack{position:absolute;inset:0;background:rgba(28,22,10,.5);backdrop-filter:blur(3px)}
+#menuCard{position:absolute;left:50%;bottom:0;transform:translateX(-50%);width:min(520px,94vw);background:var(--card);border:1px solid var(--line);border-bottom:none;border-radius:24px 24px 0 0;padding:22px 18px 28px;box-shadow:0 -20px 60px rgba(20,14,4,.45);animation:rise .45s cubic-bezier(.2,.9,.3,1.1)}
+@keyframes rise{from{transform:translate(-50%,60%);opacity:0}}
+#menuCard .grip{width:52px;height:5px;border-radius:99px;background:var(--line);margin:0 auto 14px}
+#menuCard h3{text-align:center;color:var(--wood);font-size:1.5rem}
+#menuCard .hint-txt{margin:2px 0 12px}
+.plank{width:100%;display:flex;align-items:center;gap:14px;margin-top:12px;padding:15px 18px;border:none;border-radius:14px;cursor:pointer;font:inherit;font-size:1.02rem;font-weight:700;color:#fdf4e3;text-align:left;background:linear-gradient(180deg,var(--wood2),var(--wood));box-shadow:inset 0 2px 0 rgba(255,255,255,.28),inset 0 -3px 0 rgba(0,0,0,.2),0 8px 18px rgba(60,40,10,.3);transition:transform .2s}
+.plank:hover{transform:translateX(4px)}
+.plank i{font-style:normal;font-size:1.3rem}
+.plank small{display:block;font-weight:400;font-size:.74rem;opacity:.9}
+/* ---------- BAGIAN KONTEN ---------- */
+section.blk{position:relative;padding:74px 20px;max-width:1000px;margin:0 auto}
+.shead{text-align:center;margin-bottom:34px}
+.shead h2{font-size:clamp(1.8rem,5vw,2.5rem);margin-top:6px;color:var(--ink)}
+.shead .flourish{color:var(--leaf);font-size:1.2rem;margin-top:8px}
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .8s ease,transform .8s ease}
+.reveal.in{opacity:1;transform:none}
+.sub{text-align:center;font-family:'Cormorant Garamond',serif;font-size:1.2rem;color:var(--leaf);margin:40px 0 16px}
+.divider{width:74px;height:2px;margin:0 auto;background:linear-gradient(90deg,transparent,var(--leaf2),transparent)}
+/* mempelai */
+.duo{display:grid;grid-template-columns:1fr auto 1fr;gap:26px;align-items:start}
+.duo .amp{font-size:3rem;color:var(--leaf);align-self:center;text-align:center;font-family:'Great Vibes',cursive}
+.person{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:30px 22px;text-align:center;box-shadow:var(--sh)}
+.person .ph{width:118px;height:118px;margin:0 auto 16px;border-radius:50%;background:var(--ph);border:3px solid var(--leaf2);box-shadow:0 0 0 6px rgba(95,139,70,.15);display:grid;place-items:center;font-size:2.6rem}
+.person h3{font-size:1.35rem}
+.person .role{font-size:.76rem;letter-spacing:.22em;text-transform:uppercase;color:var(--leaf);margin:4px 0 10px}
+.person p{font-size:.92rem;color:var(--ink2);line-height:1.65}
+.person .addr{margin-top:8px;font-style:italic}
+/* acara + countdown */
+.ev-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.ev{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px 24px;text-align:center;box-shadow:var(--sh)}
+.ev h3{font-size:1.5rem;color:var(--leaf)}
+.ev .ev-when{margin-top:8px;color:var(--ink);font-weight:700}
+.ev-place{margin-top:10px;color:var(--ink2)}
+.ev .addr{margin-top:6px;font-size:.88rem;color:var(--ink2);font-style:italic}
+.cd{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;max-width:560px;margin:36px auto 10px}
+.cd>div{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 6px;text-align:center;box-shadow:var(--sh)}
+.cd b{font-size:clamp(1.5rem,5vw,2.2rem);font-family:'Cormorant Garamond',serif;color:var(--wood);display:block}
+.cd span{font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;color:var(--ink2)}
+.cd-cap{text-align:center;color:var(--ink2);font-size:.88rem}
+.cd .done{grid-column:1/-1;text-align:center;font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:var(--leaf);padding:14px}
+/* cerita */
+.tl{max-width:680px;margin:0 auto;list-style:none;position:relative;padding-left:34px}
+.tl::before{content:'';position:absolute;left:9px;top:8px;bottom:8px;width:2px;background:linear-gradient(var(--leaf),var(--gold))}
+.tl li{position:relative;padding:0 0 30px 6px}
+.tl li::before{content:'';position:absolute;left:-31px;top:5px;width:12px;height:12px;border-radius:50%;background:var(--leaf2);border:2px solid var(--leaf)}
+.tl b{font-family:'Cormorant Garamond',serif;color:var(--wood);font-size:1.1rem}
+.tl p{margin-top:4px;color:var(--ink2);line-height:1.68}
+/* peta mini 3D */
+.mapwrap{max-width:640px;margin:0 auto;aspect-ratio:4/3;border-radius:20px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--sh);background:var(--ph);position:relative}
+#mapCanvas{width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab}
+#mapCanvas.drag{cursor:grabbing}
+.mapwrap .badge{position:absolute;left:12px;bottom:12px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:.74rem;color:var(--ink2)}
+.venue-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:640px;margin:22px auto 0}
+.venue{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--sh);text-align:center}
+.venue b{color:var(--wood);font-family:'Cormorant Garamond',serif;font-size:1.1rem;display:block}
+.venue p{margin-top:4px;color:var(--ink2);font-size:.86rem}
+.map-actions{text-align:center;margin-top:18px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+/* buku tamu */
+.tiket{max-width:430px;margin:0 auto 34px;background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--sh);overflow:hidden}
+.tiket-head{padding:16px 22px;background:linear-gradient(120deg,var(--leaf2),var(--leaf));color:#fff;text-align:center}
+.tiket-head .kicker{color:#eef6e2}
+.tiket-head h3{font-size:1.5rem;margin-top:2px}
+.tiket-meta{text-align:center;color:var(--ink2);font-size:.8rem;margin-top:10px;letter-spacing:.06em}
+#tiketQr{width:min(62vw,250px);height:auto;margin:12px auto 4px;display:block;border-radius:14px;cursor:zoom-in;background:#fff;padding:8px}
+.tiket-sep{position:relative;border-top:1px dashed var(--line);margin:14px 0}
+.tiket-sep::before,.tiket-sep::after{content:'';position:absolute;top:-9px;width:18px;height:18px;border-radius:50%;background:var(--bg)}
+.tiket-sep::before{left:-9px}
+.tiket-sep::after{right:-9px}
+.tiket-actions{display:flex;gap:10px;justify-content:center;padding:0 18px 18px;flex-wrap:wrap}
+.tiket .hint-txt{padding:0 18px}
+.forms2{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1000px;margin:0 auto;align-items:start}
+@media(max-width:860px){.forms2{grid-template-columns:1fr}}
+.frm{margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:var(--sh);display:grid;gap:14px;width:100%}
+.frm label{font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);display:block;margin-bottom:6px}
+.frm input,.frm select,.frm textarea{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+.frm textarea{resize:vertical}
+.note{font-size:.85rem;color:var(--ink2);text-align:center}
+.refresh-info{text-align:center;color:var(--ink2);font-size:.84rem;margin:18px 0 14px}
+.mini{padding:5px 12px;font-size:.76rem;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.mini:hover{border-color:var(--leaf);color:var(--leaf)}
+.wishes{max-width:680px;margin:0 auto;display:grid;gap:10px;max-height:380px;overflow:auto;padding:2px 6px 2px 2px}
+.wish{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 15px}
+.wish b{color:var(--leaf);font-size:.92rem}
+.wish small{float:right;color:var(--ink2);font-size:.74rem;padding-top:2px}
+.wish p{margin-top:4px;font-size:.92rem;line-height:1.55;overflow-wrap:anywhere}
+/* penutup */
+#penutup{text-align:center;padding-bottom:40px}
+#penutup .big{font-size:clamp(2.4rem,7vw,3.6rem);color:var(--leaf)}
+#penutup .thanks{margin:18px 0 8px;font-family:'Cormorant Garamond',serif;font-size:1.15rem}
+#penutup .fam{color:var(--ink2);margin-bottom:26px}
+footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink2);font-size:.8rem}
+/* modal QR */
+#qrModal{position:fixed;inset:0;z-index:965;background:rgba(18,22,10,.88);display:none;place-items:center;padding:20px}
+#qrModal.on{display:grid}
+#qmCard{background:var(--card);border-radius:20px;padding:22px;text-align:center;max-width:94vw}
+#qmCard h3{color:var(--leaf)}
+#qmCanvas{width:min(72vw,300px);height:auto;border-radius:12px;margin:12px auto;display:block;background:#fff}
+#qmCard .tiket-actions{padding:6px 0 0}
+/* panel admin */
+#adminPanel{position:fixed;inset:0;z-index:960;background:var(--bg);overflow:auto;display:none;padding:22px}
+#adminPanel.on{display:block}
+.adm-wrap{max-width:940px;margin:0 auto}
+.adm-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.adm-head h2{color:var(--leaf)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:12px;margin-bottom:20px}
+.stats div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center}
+.stats b{font-size:1.6rem;font-family:'Cormorant Garamond',serif;color:var(--wood);display:block}
+.stats span{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.adm-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:var(--sh)}
+.adm-card h3{color:var(--leaf);margin-bottom:10px}
+.adm-card .hint-txt{text-align:left;margin-bottom:10px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row input,.row textarea{flex:1;min-width:200px;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+.row textarea{min-height:110px;font-family:inherit;resize:vertical}
+.adm-out{margin-top:12px;font-size:.88rem}
+.adm-out .lk{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.adm-out code{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow-wrap:anywhere;flex:1;min-width:180px;font-size:.78rem}
+.bulk-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px dashed var(--line)}
+.bulk-row code{overflow-wrap:anywhere;font-size:.74rem}
+.bulk-row .acts{display:flex;gap:6px}
+#qrVideo{width:100%;max-width:430px;border-radius:12px;background:#000;display:block;margin:12px 0}
+#scanRes{margin-top:10px;font-weight:700;min-height:22px}
+#scanRes.ok{color:#3f7d3a}
+#scanRes.warn{color:#b07d1f}
+#scanRes.bad{color:#b23b3b}
+table{width:100%;border-collapse:collapse;font-size:.84rem;margin-top:10px}
+th,td{border:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
+th{background:var(--bg2)}
+tbody tr:hover{background:var(--bg2)}
+/* responsif */
+@media(max-width:760px){
+  .duo{grid-template-columns:1fr}
+  .duo .amp{font-size:2.2rem}
+  .ev-grid{grid-template-columns:1fr}
+  .venue-grid{grid-template-columns:1fr}
+  .cd{gap:8px}
+  .tl{padding-left:28px}
+  .tl li::before{left:-27px}
+  section.blk{padding:56px 16px}
+  #spHint{font-size:.72rem;padding:7px 12px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<!-- ===== 1. COVER ===== -->
+<div id="cover">
+  <div class="sil s2"></div><div class="sil s1"></div>
+  <div class="flies" id="cflies"></div>
+  <div class="cvr-frame">
+    <p class="kicker">Undangan Pernikahan</p>
+    <div class="mono" id="mono">R &amp; A</div>
+    <div class="names script" id="cvrNames">Rizky &amp; Anisa</div>
+    <p class="cvr-date" id="cvrDate">Minggu, 20 Desember 2026</p>
+    <div class="cvr-to">
+      <p>Kepada Yth.</p>
+      <p>Bapak / Ibu / Saudara/i</p>
+      <p class="script" id="guestName">Tamu Undangan</p>
+    </div>
+    <button id="openBtn" class="gbtn">🌿 Buka Undangan</button>
+  </div>
+</div>
+
+<button class="fbtn" id="darkBtn" title="Mode gelap / terang" aria-label="Mode gelap">🌙</button>
+<button class="fbtn" id="palBtn" title="Pilihan tema warna" aria-label="Tema warna">🎨</button>
+<div id="palPop" role="menu">
+  <button class="paldot" data-t="hutan" title="Hutan" aria-label="Tema hutan"></button>
+  <button class="paldot" data-t="senja" title="Senja" aria-label="Tema senja"></button>
+  <button class="paldot" data-t="sakura" title="Sakura" aria-label="Tema sakura"></button>
+</div>
+<button class="fbtn" id="musicBtn" title="Putar / jeda musik" aria-label="Musik">🎵</button>
+<button class="fbtn" id="toTop" title="Ke atas" aria-label="Ke atas">↑</button>
+<div id="toast" role="status"></div>
+<div id="spHint">🌿 Ketuk papan petunjuk untuk membuka menu</div>
+
+<!-- ===== 2. HERO: TAMAN HUTAN 3D ===== -->
+<header id="hero">
+  <div id="sceneWrap"><canvas id="scene"></canvas></div>
+  <div id="spFallback">
+    <div class="hill"></div>
+    <div class="tree" style="left:8%"></div>
+    <div class="tree t2" style="left:22%"></div>
+    <div class="tree t3" style="left:78%"></div>
+    <div class="tree" style="left:88%"></div>
+  </div>
+  <div id="loadChip">✨ Menyiapkan hutan dongeng…</div>
+  <button class="fbtn" id="menuBtn">☰ Menu</button>
+  <div id="heroUI">
+    <p class="kicker">The Wedding Of</p>
+    <h1 class="script" id="heroNames">Rizky &amp; Anisa</h1>
+    <p class="hero-date" id="heroDate">Minggu · 20 Desember 2026</p>
+  </div>
+  <div class="shint">▾ Gulir untuk menjelajah</div>
+</header>
+
+<!-- panel menu petunjuk -->
+<div id="menuPanel">
+  <div id="menuBack"></div>
+  <div id="menuCard">
+    <div class="grip"></div>
+    <h3>Papan Petunjuk</h3>
+    <p class="hint-txt">Pilih arah yang ingin dituju</p>
+    <button class="plank" data-goto="cerita"><i>📖</i><span>Cerita Kami<small>Perjalanan cinta kami dari awal bertemu</small></span></button>
+    <button class="plank" data-goto="lokasi"><i>🗺️</i><span>Lokasi Acara<small>Peta 3D mini lokasi &amp; venue acara</small></span></button>
+    <button class="plank" data-goto="buku"><i>✍️</i><span>Buku Tamu<small>Tiket QR, RSVP &amp; kirim ucapan</small></span></button>
+  </div>
+</div>
+
+<!-- ===== 3. MEMPELAI ===== -->
+<section class="blk" id="mempelai">
+  <div class="shead reveal">
+    <p class="kicker">Assalamu'alaikum Wr. Wb. / Salam Sejahtera</p>
+    <h2>Mempelai</h2>
+    <p class="flourish">❧</p>
+  </div>
+  <p class="lead reveal">Dengan memohon rahmat dan ridha Tuhan Yang Maha Esa, kami bermaksud menyelenggarakan pernikahan putra-putri kami:</p>
+  <div class="duo reveal" style="margin-top:34px">
+    <article class="person">
+      <div class="ph">🌱</div>
+      <h3 id="gFull">Rizky Pratama, S.T.</h3>
+      <p class="role">Putra Pertama</p>
+      <p id="gParents">Putra dari Bapak Ahmad Pratama &amp; Ibu Siti Rahayu</p>
+      <p class="addr" id="gAddr">📍 Jl. Melati No. 12, Jakarta Selatan</p>
+    </article>
+    <div class="amp">&amp;</div>
+    <article class="person">
+      <div class="ph">🌷</div>
+      <h3 id="bFull">Anisa Putri, S.Psi.</h3>
+      <p class="role">Putri Kedua</p>
+      <p id="bParents">Putri dari Bapak Bambang Wijaya &amp; Ibu Dewi Lestari</p>
+      <p class="addr" id="bAddr">📍 Jl. Anggrek No. 8, Bandung</p>
+    </article>
+  </div>
+</section>
+
+<!-- ===== 4. ACARA + HITUNG MUNDUR ===== -->
+<section class="blk" id="acara">
+  <div class="shead reveal">
+    <p class="kicker">Save The Date</p>
+    <h2>Rangkaian Acara</h2>
+    <p class="flourish">❧</p>
+  </div>
+  <div class="ev-grid reveal" id="eventList"></div>
+  <div class="cd reveal" id="cd">
+    <div><b id="cdD">00</b><span>Hari</span></div>
+    <div><b id="cdH">00</b><span>Jam</span></div>
+    <div><b id="cdM">00</b><span>Menit</span></div>
+    <div><b id="cdS">00</b><span>Detik</span></div>
+  </div>
+  <p class="cd-cap" id="cdCap"></p>
+</section>
+
+<!-- ===== 5. CERITA KAMI ===== -->
+<section class="blk" id="cerita">
+  <div class="shead reveal">
+    <p class="kicker">Our Love Story</p>
+    <h2>Cerita Kami</h2>
+    <p class="flourish">❧</p>
+  </div>
+  <ol class="tl reveal" id="storyList"></ol>
+</section>
+
+<!-- ===== 6. LOKASI (PETA 3D MINI) ===== -->
+<section class="blk" id="lokasi">
+  <div class="shead reveal">
+    <p class="kicker">Find Us</p>
+    <h2>Lokasi Acara</h2>
+    <p class="flourish">❧</p>
+  </div>
+  <div class="mapwrap reveal">
+    <canvas id="mapCanvas" aria-label="Peta 3D mini lokasi acara"></canvas>
+    <span class="badge">🖐 Geser untuk memutar peta</span>
+  </div>
+  <div class="venue-grid reveal" id="lokVenues"></div>
+  <div class="map-actions reveal">
+    <a class="gbtn wood" id="mapBtn" target="_blank" rel="noopener">📍 Buka di Google Maps</a>
+    <a class="gbtn" id="waBtn" target="_blank" rel="noopener">💬 Tanya Panitia</a>
+  </div>
+</section>
+
+<!-- ===== 7. BUKU TAMU (TIKET QR + RSVP + UCAPAN) ===== -->
+<section class="blk" id="buku">
+  <div class="shead reveal">
+    <p class="kicker">Guest Book</p>
+    <h2>Buku Tamu</h2>
+    <p class="flourish">❧</p>
+  </div>
+  <div class="tiket reveal" id="tiketCard" style="display:none">
+    <div class="tiket-head">
+      <p class="kicker">Tiket Undangan</p>
+      <h3 class="script" id="tiketName">Nama Tamu</h3>
+    </div>
+    <p class="tiket-meta" id="tiketMeta"></p>
+    <canvas id="tiketQr" width="320" height="320" aria-label="QR tiket undangan"></canvas>
+    <p class="hint-txt">Tunjukkan QR ini kepada panitia saat check-in di hari acara.</p>
+    <div class="tiket-sep"></div>
+    <div class="tiket-actions">
+      <button class="mini" id="tiketDl" type="button">⬇ Unduh QR</button>
+      <button class="mini" id="tiketBig" type="button">🔍 Perbesar</button>
+    </div>
+  </div>
+  <div class="forms2">
+    <form class="frm reveal" id="rsvpForm">
+      <h3 style="color:var(--leaf)">Konfirmasi Kehadiran</h3>
+      <div>
+        <label for="fName">Nama</label>
+        <input id="fName" required maxlength="60" autocomplete="name">
+      </div>
+      <div>
+        <label for="fStatus">Kehadiran</label>
+        <select id="fStatus">
+          <option>Hadir</option>
+          <option>Berhalangan</option>
+          <option>Masih Ragu</option>
+        </select>
+      </div>
+      <div>
+        <label for="fCount">Jumlah Tamu</label>
+        <select id="fCount">
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
+        </select>
+      </div>
+      <button class="gbtn" type="submit" id="rsvpBtn">Kirim Konfirmasi</button>
+      <p class="note" id="rsvpNote"></p>
+    </form>
+    <form class="frm reveal" id="wishForm">
+      <h3 style="color:var(--leaf)">Kirim Ucapan</h3>
+      <div>
+        <label for="wName">Nama</label>
+        <input id="wName" required maxlength="60">
+      </div>
+      <div>
+        <label for="wMsg">Ucapan</label>
+        <textarea id="wMsg" rows="4" required maxlength="500" placeholder="Tuliskan doa & ucapan untuk kedua mempelai..."></textarea>
+      </div>
+      <button class="gbtn" type="submit">Kirim Ucapan</button>
+    </form>
+  </div>
+  <p class="refresh-info"><span id="wishCount">0</span> ucapan · diperbarui otomatis tiap 30 detik <button class="mini" id="wishRefresh" type="button">Muat ulang</button></p>
+  <div class="wishes" id="wishList"></div>
+</section>
+
+<!-- ===== 8. PENUTUP ===== -->
+<section class="blk" id="penutup">
+  <p class="kicker reveal">See You There</p>
+  <p class="script big reveal" id="closeNames">Rizky &amp; Anisa</p>
+  <p class="lead reveal">Merupakan suatu kehormatan dan kebahagiaan bagi kami apabila Bapak/Ibu/Saudara/i berkenan hadir dan memberikan doa restu kepada kedua mempelai.</p>
+  <p class="thanks reveal">Atas kehadiran dan doanya, kami ucapkan terima kasih.</p>
+  <p class="fam reveal">Keluarga Besar Pratama &amp; Wijaya</p>
+  <footer>© 2026 Rizky &amp; Anisa · Dibuat dengan ❤</footer>
+</section>
+
+<!-- modal QR besar -->
+<div id="qrModal" role="dialog" aria-label="QR tiket">
+  <div id="qmCard">
+    <h3>Tiket Undangan</h3>
+    <p class="hint-txt" id="qmName"></p>
+    <canvas id="qmCanvas" width="320" height="320"></canvas>
+    <div class="tiket-actions">
+      <button class="mini copy" id="qmCopy" type="button">Salin Link</button>
+      <button class="mini" id="qmDl" type="button">⬇ Unduh QR</button>
+      <button class="mini" id="qmClose" type="button">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- panel admin (?admin=KUNCI) -->
+<div id="adminPanel">
+  <div class="adm-wrap">
+    <div class="adm-head">
+      <h2>Dashboard Admin</h2>
+      <button class="mini" id="admClose" type="button">Tutup</button>
+    </div>
+    <div class="stats" id="admStats"></div>
+    <div class="adm-card">
+      <h3>Generator Link Tamu</h3>
+      <p class="hint-txt">Link personal berformat ?to=Nama-Tamu&amp;key=KUNCI&amp;code=KODE. Tamu yang membuka link ini dapat mengirim RSVP &amp; ucapan yang otomatis tercatat di Google Sheets dengan namanya sendiri, sekaligus mendapat tiket QR untuk check-in.</p>
+      <div class="row">
+        <input id="admName" placeholder="Nama tamu, contoh: Budi Santoso">
+        <button class="gbtn" id="admGen" type="button">Buat Link</button>
+      </div>
+      <div class="adm-out" id="admOut"></div>
+    </div>
+    <div class="adm-card">
+      <h3>Generator Link Massal (untuk WhatsApp)</h3>
+      <p class="hint-txt">Tempel daftar nama tamu, satu nama per baris. Semua link dibuat sekaligus — tinggal bagikan lewat tombol WA per tamu.</p>
+      <div class="row" style="align-items:stretch">
+        <textarea id="admBulk" placeholder="Budi Santoso&#10;Siti Aminah&#10;Keluarga Hartono&#10;..."></textarea>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="gbtn" id="admGenBulk" type="button">Buat Semua Link</button>
+        <button class="mini copy" id="admCopyAll" type="button">Salin Semua</button>
+      </div>
+      <div class="adm-out" id="admBulkOut"></div>
+    </div>
+    <div class="adm-card">
+      <h3>Check-in Tamu (Scan QR)</h3>
+      <p class="hint-txt">Pindai QR tiket tamu saat hari acara. Kamera butuh HTTPS/hosting. Jika browser tidak mendukung, pakai input manual.</p>
+      <div class="row">
+        <button class="gbtn" id="scanStart" type="button">▶ Mulai Scan</button>
+        <button class="gbtn wood" id="scanStop" type="button" style="display:none">■ Stop</button>
+      </div>
+      <video id="qrVideo" playsinline muted style="display:none"></video>
+      <p class="hint-txt" id="scanNote" style="text-align:left"></p>
+      <div id="scanRes"></div>
+      <div class="row" style="margin-top:12px">
+        <input id="scanMan" placeholder="Check-in manual: ketik nama / kunci tamu">
+        <button class="mini" id="scanManBtn" type="button">Check-in</button>
+      </div>
+      <h4 style="margin-top:16px;color:var(--wood)">Check-in Terakhir</h4>
+      <div class="wishes" id="khList" style="max-height:220px"></div>
+    </div>
+    <div class="adm-card">
+      <h3>Data Tamu, RSVP, Ucapan &amp; Kehadiran</h3>
+      <p class="hint-txt">Data dari Google Sheets. <button class="mini" id="admReload" type="button">Muat ulang</button></p>
+      <div id="admTable"></div>
+    </div>
+  </div>
+</div>
+
+<audio id="bgm" loop preload="none"></audio>
+<script>
+/* ================= KONFIGURASI (isi data Anda di sini) ================= */
+const C={
+  adminKey:'ganti-kunci-ini',            // WAJIB diganti; samakan dengan ADMIN di Apps Script
+  sheetUrl:'',                            // URL Web App Apps Script (berakhiran /exec)
+  date:'2026-12-20T08:00:00+07:00',       // tanggal & jam akad (contoh)
+  couple:{
+    groom:{nick:'Rizky',full:'Rizky Pratama, S.T.',
+      parents:'Putra pertama dari Bapak Ahmad Pratama & Ibu Siti Rahayu',
+      address:'Jl. Melati No. 12, Kebayoran Baru, Jakarta Selatan'},
+    bride:{nick:'Anisa',full:'Anisa Putri, S.Psi.',
+      parents:'Putri kedua dari Bapak Bambang Wijaya & Ibu Dewi Lestari',
+      address:'Jl. Anggrek No. 8, Dago, Bandung'}
+  },
+  events:[
+    {name:'Akad Nikah',day:'Minggu',date:'20 Desember 2026',time:'08.00 – 10.00 WIB',
+     place:'Masjid Agung Al-Azhar',address:'Jl. Sisingamangaraja No. 1, Jakarta Selatan'},
+    {name:'Resepsi',day:'Minggu',date:'20 Desember 2026',time:'11.00 – 14.00 WIB',
+     place:'Balai Sarbini',address:'Jl. Gatot Subroto Kav. 50, Jakarta Selatan'}
+  ],
+  stories:[
+    {t:'2018',h:'Pertama Bertemu',p:'Kami dipertemukan di sebuah kegiatan kampus — obrolan singkat yang ternyata menjadi awal dari segalanya.'},
+    {t:'2021',h:'Mulai Menjalin',p:'Setelah bertahun-tahun berteman, Rizky memberanikan diri menyatakan perasaannya... dan ternyata baik-baik saja dirayu balik.'},
+    {t:'2025',h:'Lamaran',p:'Di hadapan kedua keluarga besar, Rizky berlutut meminta Anisa menjadi pendamping hidupnya.'},
+    {t:'2026',h:'Menuju Pelaminan',p:'Kini kami melangkah ke babak baru kehidupan. Doakan perjalanan kami, ya!'}
+  ],
+  music:'',                               // URL file musik, contoh: 'musik.mp3'
+  mapsQuery:'Balai Sarbini Jakarta',      // kata kunci lokasi untuk tombol peta
+  mapsLink:'https://maps.app.goo.gl/CONTOH', // link Google Maps (tombol "Buka di Google Maps")
+  waPanitia:'6281234567890',              // nomor WA panitia (format 62...)
+  waText:'Halo panitia, saya ingin bertanya tentang undangan pernikahan Rizky & Anisa.',
+  inviteText:'Assalamu\'alaikum warahmatullahi wabarakatuh.\n\nTanpa mengurangi rasa hormat, kami mengundang {nama} untuk hadir di pernikahan:\n\n*{pasangan}*\n{tanggal}\n\nLink undangan pribadi Anda:\n{link}\n\nMerupakan kebahagiaan bagi kami bila Bapak/Ibu/Saudara/i berkenan hadir. Terima kasih 🙏'
+};
+/* ======================================================================= */
+
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nk=s=>String(s??'').toLowerCase();
+const slug=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
+const titleCase=s=>String(s||'').trim().toLowerCase().replace(/(^|[-\s])([a-z])/g,(m,a,b)=>a+b.toUpperCase());
+const params=new URLSearchParams(location.search);
+const ADMIN=params.get('admin')||'';
+const isAdmin=!!ADMIN&&ADMIN===C.adminKey;
+const G={
+  name:params.get('to')?titleCase(decodeURIComponent(params.get('to')).replace(/[-+]/g,' ').trim()):'',
+  key:params.get('key')||'',
+  code:params.get('code')||''
+};
+const INVITE_LINK=location.origin+location.pathname+(G.name&&G.key?('?to='+slug(G.name)+'&key='+G.key+(G.code?'&code='+G.code:'')):'');
+let toastT;
+function toast(m,ms=2600){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),ms)}
+function fmtDate(d){try{return d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}catch(e){return''}}
+function fTime(t){try{const d=new Date(t);return isNaN(d)?'':d.toLocaleDateString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}catch(e){return''}}
+
+/* ---------- ISI DATA STATIS DARI CONFIG ---------- */
+function fillStatic(){
+  const g=C.couple.groom,b=C.couple.bride,wed=new Date(C.date);
+  const tgl=fmtDate(wed), jodoh=g.nick+' & '+b.nick;
+  document.title='The Wedding of '+jodoh;
+  $('#mono').textContent=g.nick[0]+' & '+b.nick[0];
+  $('#cvrNames').textContent=jodoh;
+  $('#cvrDate').textContent=tgl;
+  $('#heroNames').textContent=jodoh;
+  $('#heroDate').textContent=wed.toLocaleDateString('id-ID',{weekday:'long'})+' · '+wed.toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
+  $('#closeNames').textContent=jodoh;
+  $('#guestName').textContent=G.name||'Tamu Undangan';
+  $('#gFull').textContent=g.full;$('#gParents').textContent=g.parents;$('#gAddr').textContent='📍 '+g.address;
+  $('#bFull').textContent=b.full;$('#bParents').textContent=b.parents;$('#bAddr').textContent='📍 '+b.address;
+  $('#eventList').innerHTML=C.events.map(e=>`<article class="ev">
+      <h3>${esc(e.name)}</h3>
+      <p class="ev-when">${esc(e.day)}, ${esc(e.date)}</p>
+      <p>${esc(e.time)}</p>
+      <p class="ev-place">${esc(e.place)}</p>
+      <p class="addr">${esc(e.address)}</p>
+    </article>`).join('');
+  $('#cdCap').textContent='Menuju '+C.events[0].name+' — '+tgl;
+  $('#storyList').innerHTML=C.stories.map(s=>`<li><b>${esc(s.t)} · ${esc(s.h)}</b><p>${esc(s.p)}</p></li>`).join('');
+  $('#lokVenues').innerHTML=C.events.map(e=>`<div class="venue"><b>${esc(e.name)}</b><p>${esc(e.place)}</p><p>${esc(e.address)}</p></div>`).join('');
+  $('#mapBtn').href=C.mapsLink||('https://www.google.com/maps/search/'+encodeURIComponent(C.mapsQuery));
+  $('#waBtn').href='https://wa.me/'+C.waPanitia+'?text='+encodeURIComponent(C.waText);
+  $('#fName').value=G.name;$('#wName').value=G.name;
+  if(G.name&&G.key){
+    $('#tiketCard').style.display='';
+    $('#tiketName').textContent=G.name;
+    $('#tiketMeta').textContent='Kode '+G.code+' · '+jodoh+' · '+tgl;
+    ['#fName','#wName'].forEach(s=>{const el=$(s);el.readOnly=true;el.title='Nama terkunci dari link personal'});
+  }
+}
+
+/* ---------- HITUNG MUNDUR ---------- */
+function tick(){
+  const d=new Date(C.date)-new Date();
+  if(isNaN(d))return;
+  if(d<=0){
+    $('#cd').innerHTML='<div class="done">🌸 Alhamdulillah, kami telah menikah. Terima kasih atas doa &amp; restunya!</div>';
+    return;
+  }
+  const s=Math.floor(d/1000);
+  $('#cdD').textContent=String(Math.floor(s/86400)).padStart(2,'0');
+  $('#cdH').textContent=String(Math.floor(s%86400/3600)).padStart(2,'0');
+  $('#cdM').textContent=String(Math.floor(s%3600/60)).padStart(2,'0');
+  $('#cdS').textContent=String(s%60).padStart(2,'0');
+}
+
+/* ---------- KUNANG-KUNANG COVER ---------- */
+(function(){
+  const w=$('#cflies');
+  for(let i=0;i<14;i++){
+    const f=document.createElement('i');
+    f.className='cfly';
+    f.style.cssText='left:'+(Math.random()*100)+'%;top:'+(30+Math.random()*65)+'%;animation-delay:'+(-Math.random()*7).toFixed(2)+'s;animation-duration:'+(5+Math.random()*5).toFixed(2)+'s';
+    w.appendChild(f);
+  }
+})();
+
+/* ---------- BUKA UNDANGAN & MUSIK ---------- */
+const bgm=$('#bgm');
+let volT;
+function fadeVol(to){clearInterval(volT);volT=setInterval(()=>{const d=to-bgm.volume;if(Math.abs(d)<.04){bgm.volume=to;clearInterval(volT)}else bgm.volume+=d*.12},70)}
+function startMusic(){
+  if(!C.music)return;
+  if(!bgm.src)bgm.src=C.music;
+  bgm.volume=0;
+  bgm.play().then(()=>{$('#musicBtn').classList.add('on');fadeVol(.55)}).catch(()=>{});
+}
+$('#openBtn').addEventListener('click',()=>{
+  window.__opened=true;
+  document.body.classList.add('opened');
+  $('#cover').classList.add('hide');
+  if(window.Scene3D&&Scene3D.onOpen)Scene3D.onOpen();
+  startMusic();
+});
+$('#musicBtn').addEventListener('click',()=>{
+  if(!C.music){toast('Musik belum diatur — isi C.music dengan URL file musik');return}
+  if(!bgm.src)bgm.src=C.music;
+  if(bgm.paused){bgm.play().then(()=>{$('#musicBtn').classList.add('on');fadeVol(.55)}).catch(()=>toast('Gagal memutar musik'))}
+  else{bgm.pause();$('#musicBtn').classList.remove('on')}
+});
+
+/* ---------- MODE GELAP & TEMA WARNA ---------- */
+function setDark(on){
+  document.body.classList.toggle('dark',on);
+  localStorage.setItem('w3dark',on?'1':'0');
+  $('#darkBtn').textContent=on?'☀️':'🌙';
+  if(window.Scene3D&&Scene3D.setDark)Scene3D.setDark(on);
+  drawTiket();
+}
+$('#darkBtn').addEventListener('click',()=>setDark(!document.body.classList.contains('dark')));
+function setTheme(t){
+  document.body.dataset.theme=(t==='hutan')?'':t;
+  localStorage.setItem('w3theme',t);
+  $$('.paldot').forEach(b=>b.classList.toggle('sel',b.dataset.t===t));
+  if(window.Scene3D&&Scene3D.setTheme)Scene3D.setTheme(t);
+  drawTiket();
+}
+$('#palBtn').addEventListener('click',e=>{e.stopPropagation();$('#palPop').classList.toggle('on')});
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#palPop')&&!e.target.closest('#palBtn'))$('#palPop').classList.remove('on');
+});
+$$('.paldot').forEach(b=>b.addEventListener('click',()=>{setTheme(b.dataset.t);$('#palPop').classList.remove('on');toast('Tema '+b.dataset.t+' diterapkan 🌿')}));
+
+/* ---------- PANEL MENU PETUNJUK ---------- */
+let menuOpen=false;
+function openMenu(){if(menuOpen)return;menuOpen=true;$('#menuPanel').classList.add('on')}
+function closeMenu(){menuOpen=false;$('#menuPanel').classList.remove('on')}
+$('#menuBtn').addEventListener('click',openMenu);
+$('#menuBack').addEventListener('click',closeMenu);
+$$('.plank').forEach(b=>b.addEventListener('click',()=>{
+  const t=b.dataset.goto;closeMenu();
+  setTimeout(()=>{const el=document.getElementById(t);if(el)el.scrollIntoView({behavior:'smooth',block:'start'})},140);
+}));
+window.App={openMenu,get menuOpen(){return menuOpen}};
+
+/* ---------- TOMBOL KE ATAS ---------- */
+addEventListener('scroll',()=>$('#toTop').classList.toggle('show',scrollY>600),{passive:true});
+$('#toTop').addEventListener('click',()=>scrollTo({top:0,behavior:'smooth'}));
+
+/* ---------- ANIMASI REVEAL ---------- */
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});
+
+/* ---------- FILTER KATA KASAR (peka angka/simbol: a4@, i1!, dll) ---------- */
+const BAD=['anjing','anjg','bangsat','bgsd','bajingan','kontol','kntl','memek','mmk','ngentot','ngntd',
+  'setan','stn','monyet','mnyet','taik','tai','babi','jembut','jmbt','asu','goblok','gblok','tolol',
+  'idiot','bodoh','sialan','brengsek','fuck','fck','shit'];
+const LEET={a:'a4@',b:'b8',e:'e3',g:'g9',i:'i1!|',o:'o0',s:'s5$',t:'t7'};
+function cleanText(t){
+  let s=String(t||'');
+  for(const w of BAD){
+    const pat=w.split('').map(c=>'['+(LEET[c]||c)+']').join('');
+    let re;try{re=new RegExp('(^|[^\\p{L}])('+pat+')(?=$|[^\\p{L}])','giu')}
+    catch(e){re=new RegExp('\\b'+pat+'\\b','gi')}
+    s=s.replace(re,(m,a)=>a+'*'.repeat(w.length));
+  }
+  return s;
+}
+
+/* ---------- LAPISAN DATA: GOOGLE SHEETS / UJI COBA LOKAL ---------- */
+async function post(o){
+  if(!C.sheetUrl)return 'local';
+  try{
+    const r=await fetch(C.sheetUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(o),redirect:'follow'});
+    return (await r.text()).trim();
+  }catch(e){return 'error'}
+}
+async function loadData(){
+  if(!C.sheetUrl)return null;
+  try{
+    const sep=C.sheetUrl.includes('?')?'&':'?';
+    const r=await fetch(C.sheetUrl+sep+'admin='+encodeURIComponent(ADMIN)+'&t='+Date.now());
+    return JSON.parse(await r.text());
+  }catch(e){return null}
+}
+function saveLocal(type,d){
+  const k=type==='rsvp'?'w3r':'w3w';
+  const a=JSON.parse(localStorage.getItem(k)||'[]');
+  const b=JSON.parse(localStorage.getItem(type==='rsvp'?'w3w':'w3r')||'[]');
+  const key=G.key||slug(d.name);
+  const all=[...a,...b].filter(r=>nk(r[5])===nk(key));
+  const prev=f=>{const h=all.filter(r=>r[f]);return h.length?h[h.length-1][f]:''};
+  const row=[new Date().toISOString(),d.name,
+    d.status||prev(2)||'',d.count||prev(3)||'',d.msg||prev(4)||'',key];
+  const i=a.findIndex(r=>nk(r[5])===nk(key));
+  if(i>-1)a[i]=row;else a.push(row);
+  localStorage.setItem(k,JSON.stringify(a));
+}
+function localRows(){
+  const a=JSON.parse(localStorage.getItem('w3r')||'[]'),b=JSON.parse(localStorage.getItem('w3w')||'[]');
+  const seen={},out=[];
+  [...a,...b].forEach(r=>{
+    const k=nk(r[5]);
+    if(!seen[k]){seen[k]=[...r];out.push(seen[k])}
+    else{
+      const t=seen[k];
+      [2,3,4].forEach(f=>{if(r[f])t[f]=r[f]});
+      if(!t[1]&&r[1])t[1]=r[1];
+      if(String(r[0])>String(t[0]))t[0]=r[0];
+    }
+  });
+  return out;
+}
+function renderWishes(j){
+  let rows;
+  if(j&&j.wishes&&j.wishes.length)rows=j.wishes.filter(w=>w[1]&&(w[4]||'').trim());
+  else if(j&&j.wishes)rows=[];
+  else rows=localRows().filter(w=>w[1]&&(w[4]||'').trim());
+  rows=rows.slice().sort((a,b)=>String(b[0]).localeCompare(String(a[0]))).slice(0,60);
+  $('#wishCount').textContent=rows.length;
+  $('#wishList').innerHTML=rows.length?rows.map(w=>`<div class="wish">
+      <b>${esc(w[1])}</b><small>${esc(fTime(w[0]))}</small>
+      <p>${esc(w[4])}</p>
+    </div>`).join(''):'<p class="hint-txt">Belum ada ucapan. Jadilah yang pertama mengirim doa! 💛</p>';
+}
+async function loadWishes(){
+  if(C.sheetUrl){const j=await loadData();renderWishes(j)}
+  else renderWishes(null);
+}
+$('#wishRefresh').onclick=()=>{loadWishes();toast('Memuat ulang ucapan...')};
+setInterval(loadWishes,30000);
+
+/* ---------- FORM RSVP ---------- */
+$('#rsvpForm').onsubmit=async e=>{
+  e.preventDefault();
+  const name=$('#fName').value.trim();
+  if(!name){toast('Isi nama Anda dulu');return}
+  const data={type:'rsvp',key:G.key,code:G.code,
+    status:$('#fStatus').value,count:$('#fCount').value};
+  const btn=$('#rsvpBtn'),old='Kirim Konfirmasi';
+  btn.disabled=true;btn.textContent='Mengirim...';
+  const r=await post(data);
+  btn.disabled=false;btn.textContent=old;
+  if(r==='ok'){$('#rsvpNote').textContent='Terima kasih, konfirmasi Anda tersimpan ✓';toast('Konfirmasi terkirim. Terima kasih! 💛');loadWishes()}
+  else if(r==='local'){saveLocal('rsvp',{...data,name});$('#rsvpNote').textContent='Mode uji coba: data tersimpan di browser ini (Google Sheets belum dihubungkan).';toast('Tersimpan lokal (uji coba)');loadWishes()}
+  else if(r==='invalid'){$('#rsvpNote').textContent='Link tamu tidak dikenali. Gunakan link personal yang Anda terima.';toast('Link tidak valid')}
+  else{$('#rsvpNote').textContent='Gagal mengirim. Periksa koneksi lalu coba lagi.';toast('Gagal mengirim, coba lagi')}
+};
+
+/* ---------- FORM UCAPAN ---------- */
+$('#wishForm').onsubmit=async e=>{
+  e.preventDefault();
+  const name=$('#wName').value.trim(),msg=cleanText($('#wMsg').value.trim());
+  if(!name||!msg){toast('Isi nama dan ucapannya dulu');return}
+  const data={type:'wish',key:G.key,code:G.code,msg,name};
+  const r=await post(data);
+  if(r==='ok'){toast('Ucapan terkirim 💛');$('#wMsg').value='';loadWishes()}
+  else if(r==='local'){saveLocal('wish',data);$('#wMsg').value='';toast('Tersimpan lokal (uji coba)');loadWishes()}
+  else if(r==='invalid')toast('Gunakan link personal yang Anda terima');
+  else toast('Gagal mengirim, coba lagi');
+};
+
+/* ---------- QR TIKET (qrcode-generator) ---------- */
+let qrLib=null,qrLoading=false;
+function loadQrLib(cb){
+  if(qrLib){cb&&cb();return}
+  if(qrLoading)return;
+  qrLoading=true;
+  const s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+  s.onload=()=>{qrLib=window.qrcode;cb&&cb()};
+  s.onerror=()=>{qrLoading=false};
+  document.head.appendChild(s);
+}
+function rrect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+function drawQr(cv,text){
+  if(!qrLib||!cv||!text)return false;
+  const q=qrLib(0,'M');q.addData(text);q.make();
+  const n=q.getModuleCount(),ctx=cv.getContext('2d'),W=cv.width,pad=W*.055,cell=(W-pad*2)/n;
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,W);
+  ctx.fillStyle=document.body.classList.contains('dark')?'#3d5026':'#2f401c';
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++){
+    if(q.isDark(r,c)){rrect(ctx,pad+c*cell,pad+r*cell,cell*.92,cell*.92,cell*.3);ctx.fill()}
+  }
+  return true;
+}
+function drawTiket(){
+  if(!(G.name&&G.key))return;
+  loadQrLib(()=>{drawQr($('#tiketQr'),INVITE_LINK||location.href)});
+}
+function dlCanvas(cv,name){
+  const a=document.createElement('a');
+  a.download=name;a.href=cv.toDataURL('image/png');a.click();
+}
+$('#tiketDl').addEventListener('click',()=>{
+  if(!qrLib){toast('Pustaka QR masih dimuat, coba lagi sebentar');loadQrLib(drawTiket);return}
+  drawTiket();dlCanvas($('#tiketQr'),'tiket-'+slug(G.name)+'.png');toast('QR tiket diunduh ⬇');
+});
+function openQrModal(){
+  if(!(G.name&&G.key)){toast('Tiket QR hanya untuk tamu dengan link personal');return}
+  loadQrLib(()=>{
+    drawQr($('#qmCanvas'),INVITE_LINK||location.href);
+    $('#qmName').textContent=G.name+' · kode '+G.code;
+    $('#qrModal').classList.add('on');
+  });
+}
+$('#tiketQr').addEventListener('click',openQrModal);
+$('#tiketBig').addEventListener('click',openQrModal);
+$('#qmClose').addEventListener('click',()=>$('#qrModal').classList.remove('on'));
+$('#qrModal').addEventListener('click',e=>{if(e.target.id==='qrModal')$('#qrModal').classList.remove('on')});
+$('#qmCopy').addEventListener('click',()=>copyText(INVITE_LINK||location.href));
+$('#qmDl').addEventListener('click',()=>{dlCanvas($('#qmCanvas'),'tiket-'+slug(G.name)+'.png')});
+
+/* ---------- SALIN KE CLIPBOARD ---------- */
+async function copyText(t){
+  try{await navigator.clipboard.writeText(t)}
+  catch(e){
+    const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+  }
+  toast('Disalin: '+t);
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.copy[data-n]');
+  if(b)copyText(b.dataset.n);
+});
+
+/* ---------- DASHBOARD ADMIN ---------- */
+let admData=null;
+function localArr(k){return JSON.parse(localStorage.getItem(k)||'[]')}
+function localMutate(sheet,key,action,fields){
+  const k={tamu:'w3g',rsvp:'w3r',wish:'w3w',hadir:'w3h'}[sheet];
+  const a=localArr(k);
+  const ki=(sheet==='tamu'||sheet==='hadir')?2:5;
+  const i=a.findIndex(r=>nk(r[ki])===nk(key));
+  if(i<0)return false;
+  if(action==='delete')a.splice(i,1);
+  else{
+    fields=fields||{};
+    if(fields.name)a[i][1]=fields.name;
+    if(sheet==='rsvp'){if(fields.status!=null)a[i][2]=fields.status;if(fields.count!=null)a[i][3]=fields.count}
+    if(sheet==='wish'&&fields.msg!=null)a[i][4]=fields.msg;
+    if(sheet==='tamu'&&fields.code)a[i][3]=fields.code;
+  }
+  localStorage.setItem(k,JSON.stringify(a));
+  return true;
+}
+async function reloadAdmin(){admData=C.sheetUrl?await loadData():null;renderAdmin(admData);renderKh()}
+function renderAdmin(j){
+  const loc=!j;
+  const t=loc?localArr('w3g'):(j.tamu||[]);
+  const r=loc?localArr('w3r'):(j.rsvp||[]);
+  const w=loc?localArr('w3w'):(j.wishes||[]);
+  const kh=loc?localArr('w3h'):(j.kehadiran||[]);
+  const hadir=r.filter(x=>x[2]==='Hadir').reduce((a,x)=>a+(+x[3]||0),0);
+  const rsvpIn=r.filter(x=>x[2]==='Hadir').length;
+  $('#admStats').innerHTML=`
+    <div><b>${t.length}</b><span>Tamu Terdaftar</span></div>
+    <div><b>${hadir}</b><span>RSVP Hadir (${rsvpIn} konfirmasi)</span></div>
+    <div><b>${kh.length}</b><span>Sudah Check-in</span></div>
+    <div><b>${r.filter(x=>x[2]==='Berhalangan').length}</b><span>Berhalangan</span></div>
+    <div><b>${w.filter(x=>x[1]&&(x[4]||'').trim()).length}</b><span>Ucapan</span></div>`;
+  const tblT=t.map(x=>`<tr><td>${esc(x[1])}</td><td><code>${esc(x[2])}</code></td><td>${esc(x[3])}</td>
+    <td><button class="mini" data-ed="tamu" data-key="${esc(x[2])}" data-name="${esc(x[1])}" data-code="${esc(x[3])}">Edit</button>
+    <button class="mini" data-del="tamu" data-key="${esc(x[2])}">Hapus</button></td></tr>`).join('')
+    ||'<tr><td colspan="4">Belum ada tamu.</td></tr>';
+  const tblR=r.map(x=>`<tr><td>${esc(x[1])}</td><td>${esc(x[2])}</td><td>${esc(x[3])}</td>
+    <td><button class="mini" data-ed="rsvp" data-key="${esc(x[5])}" data-name="${esc(x[1])}" data-status="${esc(x[2])}" data-count="${esc(x[3])}">Edit</button>
+    <button class="mini" data-del="rsvp" data-key="${esc(x[5])}">Hapus</button></td></tr>`).join('')
+    ||'<tr><td colspan="4">Belum ada RSVP.</td></tr>';
+  const tblW=w.filter(x=>x[1]&&(x[4]||'').trim()).map(x=>`<tr><td>${esc(x[1])}</td><td>${esc(String(x[4]).slice(0,80))}</td>
+    <td><button class="mini" data-ed="wish" data-key="${esc(x[5])}" data-name="${esc(x[1])}" data-msg="${esc(x[4])}">Edit</button>
+    <button class="mini" data-del="wish" data-key="${esc(x[5])}">Hapus</button></td></tr>`).join('')
+    ||'<tr><td colspan="3">Belum ada ucapan.</td></tr>';
+  const tblKh=kh.map(x=>`<tr><td>${esc(x[1])}</td><td><code>${esc(x[2])}</code></td><td>${esc(x[4]||'QR')}</td><td>${esc(fTime(x[0]))}</td>
+    <td><button class="mini" data-del="hadir" data-key="${esc(x[2])}">Hapus</button></td></tr>`).join('')
+    ||'<tr><td colspan="5">Belum ada check-in.</td></tr>';
+  $('#admTable').innerHTML=`
+    ${loc?'<p class="hint-txt" style="text-align:left">Mode uji coba: menampilkan data dari browser ini. Hubungkan Google Sheets (C.sheetUrl) untuk data online.</p>':''}
+    <h4>Tamu</h4>
+    <table><thead><tr><th>Nama</th><th>Kunci</th><th>Kode</th><th>Aksi</th></tr></thead><tbody>${tblT}</tbody></table>
+    <h4 style="margin-top:18px">RSVP</h4>
+    <table><thead><tr><th>Nama</th><th>Status</th><th>Jumlah</th><th>Aksi</th></tr></thead><tbody>${tblR}</tbody></table>
+    <h4 style="margin-top:18px">Ucapan</h4>
+    <table><thead><tr><th>Nama</th><th>Ucapan</th><th>Aksi</th></tr></thead><tbody>${tblW}</tbody></table>
+    <h4 style="margin-top:18px">Kehadiran (Check-in)</h4>
+    <table><thead><tr><th>Nama</th><th>Kunci</th><th>Metode</th><th>Waktu</th><th>Aksi</th></tr></thead><tbody>${tblKh}</tbody></table>`;
+}
+function buildInvite(name,link){
+  return C.inviteText.replace(/{nama}/g,name)
+    .replace(/{pasangan}/g,C.couple.groom.nick+' & '+C.couple.bride.nick)
+    .replace(/{tanggal}/g,fmtDate(new Date(C.date)))
+    .replace(/{link}/g,link);
+}
+function waLink(name,link){return 'https://wa.me/?text='+encodeURIComponent(buildInvite(name,link))}
+$('#admGen').onclick=async()=>{
+  const name=titleCase($('#admName').value.trim());
+  if(!name){toast('Isi nama tamu dulu');return}
+  const j=C.sheetUrl?await loadData():null;
+  const ada=((j&&j.tamu)||[]).concat(localArr('w3g'));
+  if(ada.some(t=>slug(t[1])===slug(name))){toast('Nama "'+name+'" sudah terdaftar — gunakan nama lain');return}
+  const key=slug(name)+'-'+Math.random().toString(36).slice(2,6);
+  const code=String(Math.floor(1000+Math.random()*9000));
+  const r=await post({type:'guest',adminKey:C.adminKey,name,key,code});
+  if(r==='forbidden'){toast('Kunci admin salah');return}
+  if(r==='exists'||r==='exists-name'){toast('Nama atau kunci sudah terdaftar');return}
+  const loc=localArr('w3g');
+  if(r==='local'){loc.push([new Date().toISOString(),name,key,code]);localStorage.setItem('w3g',JSON.stringify(loc))}
+  const link=location.origin+location.pathname+'?to='+slug(name)+'&key='+key+'&code='+code;
+  $('#admOut').innerHTML=`<p><b>${esc(name)}</b> — kode tiket: <code>${esc(code)}</code></p>
+    <div class="lk"><code>${esc(link)}</code>
+      <button class="mini copy" data-n="${esc(link)}" type="button">Salin Link</button>
+      <a class="mini" target="_blank" rel="noopener" href="${esc(waLink(name,link))}">Kirim WA</a></div>
+    <p class="note" style="text-align:left">${r==='local'?'(Uji coba: Sheets belum terhubung — link hanya ditampilkan.)':'Tersimpan di tab Tamu ✓'}</p>`;
+  if(r==='ok')reloadAdmin();
+  else{renderAdmin(null);renderKh()}
+};
+let bulkLinks=[];
+$('#admGenBulk').onclick=async()=>{
+  const names=[...new Set($('#admBulk').value.split('\n').map(s=>s.trim()).filter(Boolean))];
+  if(!names.length){toast('Tempel daftar nama dulu, satu per baris');return}
+  const btn=$('#admGenBulk');btn.disabled=true;btn.textContent='Membuat...';
+  const j=C.sheetUrl?await loadData():null;
+  const ada=new Set(((j&&j.tamu)||[]).concat(localArr('w3g')).map(t=>slug(t[1])));
+  const list=[],dupN=[];
+  names.forEach(n=>{
+    const name=titleCase(n),s=slug(name);
+    if(ada.has(s)){dupN.push(name);return}
+    ada.add(s);
+    list.push({name,key:s+'-'+Math.random().toString(36).slice(2,6),code:String(Math.floor(1000+Math.random()*9000))});
+  });
+  let info='';
+  if(list.length){
+    const r=await post({type:'guests',adminKey:C.adminKey,list});
+    if(r==='forbidden'){toast('Kunci admin salah');btn.disabled=false;btn.textContent='Buat Semua Link';return}
+    if(r==='local'){
+      const loc=localArr('w3g');
+      list.forEach(g=>loc.push([new Date().toISOString(),g.name,g.key,g.code]));
+      localStorage.setItem('w3g',JSON.stringify(loc));
+      info='Uji coba: '+list.length+' tamu tersimpan di browser ini (Sheets belum terhubung).';
+    }else{
+      let res={};try{res=JSON.parse(r)}catch(e){}
+      if(res.status==='ok'){info=res.added+' tamu baru tersimpan di Sheets ✓';if(res.dup&&res.dup.length)dupN.push(...res.dup)}
+      else info='Respons tidak dikenal: '+r;
+    }
+  }
+  bulkLinks=list.map(g=>({name:g.name,link:location.origin+location.pathname+'?to='+slug(g.name)+'&key='+g.key+'&code='+g.code}));
+  $('#admBulkOut').innerHTML=
+    (info?`<p class="note" style="text-align:left">${esc(info)}</p>`:'')+
+    (dupN.length?`<p class="note" style="text-align:left">Dilewati (sudah terdaftar): ${esc(dupN.join(', '))}</p>`:'')+
+    bulkLinks.map(g=>`<div class="bulk-row"><div><b>${esc(g.name)}</b><br><code>${esc(g.link)}</code></div>
+      <div class="acts"><button class="mini copy" data-n="${esc(g.link)}" type="button">Salin</button>
+      <a class="mini" target="_blank" rel="noopener" href="${esc(waLink(g.name,g.link))}">WA</a></div></div>`).join('');
+  btn.disabled=false;btn.textContent='Buat Semua Link';
+  toast(list.length?('Selesai! '+list.length+' link dibuat 🌿'):'Semua nama sudah terdaftar');
+  if(list.length){if(C.sheetUrl)reloadAdmin();else{renderAdmin(null);renderKh()}}
+};
+$('#admCopyAll').onclick=()=>{
+  if(!bulkLinks.length){toast('Belum ada link dibuat');return}
+  copyText(bulkLinks.map(g=>g.name+': '+g.link).join('\n'));
+};
+$('#admTable').addEventListener('click',async e=>{
+  const b=e.target.closest('button');
+  if(!b)return;
+  if(b.dataset.ed){
+    const s=b.dataset.ed,d=b.dataset;
+    let fields={};
+    if(s==='tamu'){
+      const name=prompt('Nama tamu:',d.name);if(name===null)return;
+      const code=prompt('Kode (4 angka):',d.code);if(code===null)return;
+      fields={name,code};
+    }else if(s==='rsvp'){
+      const name=prompt('Nama:',d.name);if(name===null)return;
+      const status=prompt('Status (Hadir / Berhalangan / Masih Ragu):',d.status);if(status===null)return;
+      const count=prompt('Jumlah tamu:',d.count);if(count===null)return;
+      fields={name,status,count};
+    }else{
+      const name=prompt('Nama:',d.name);if(name===null)return;
+      const msg=prompt('Isi ucapan:',d.msg);if(msg===null)return;
+      fields={name,msg};
+    }
+    const r=await post({type:'admin',adminKey:C.adminKey,sheet:s,key:d.key,...fields});
+    if(r==='ok'){toast('Tersimpan ✓');reloadAdmin()}
+    else if(r==='local'){localMutate(s,d.key,'edit',fields);toast('Tersimpan lokal (uji coba)');reloadAdmin()}
+    else toast('Gagal: '+r);
+  }
+  if(b.dataset.del){
+    if(!confirm('Hapus baris ini?'))return;
+    const r=await post({type:'admin',adminKey:C.adminKey,sheet:b.dataset.del,key:b.dataset.key,action:'delete'});
+    if(r==='ok'){toast('Terhapus');reloadAdmin()}
+    else if(r==='local'){localMutate(b.dataset.del,b.dataset.key,'delete');toast('Terhapus lokal (uji coba)');reloadAdmin()}
+    else toast('Gagal: '+r);
+  }
+});
+$('#admReload').onclick=()=>reloadAdmin();
+$('#admClose').onclick=()=>{$('#adminPanel').classList.remove('on');toast('Panel ditutup — muat ulang halaman untuk membuka lagi')};
+
+/* ---------- CHECK-IN TAMU (QR) ---------- */
+let scanTimer=null,scanCool=0,stream=null,AC=null;
+function beep(ok){
+  try{
+    AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    const o=AC.createOscillator(),g=AC.createGain();
+    o.connect(g);g.connect(AC.destination);o.type='sine';o.frequency.value=ok?880:300;
+    g.gain.setValueAtTime(.001,AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(.2,AC.currentTime+.02);
+    g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+.3);
+    o.start();o.stop(AC.currentTime+.32);
+  }catch(e){}
+}
+function scanShow(m,c){const el=$('#scanRes');el.textContent=m;el.className=c||''}
+function guestList(){return (C.sheetUrl&&admData&&admData.tamu)?admData.tamu:localArr('w3g')}
+function findGuest(key){return guestList().find(x=>nk(x[2])===nk(key))||null}
+function findGuestInput(v){const s=slug(v);return guestList().find(x=>nk(x[2])===nk(v)||(s&&slug(x[1])===s))||null}
+function renderKh(){
+  let rows;
+  if(C.sheetUrl&&admData&&Array.isArray(admData.kehadiran))rows=admData.kehadiran;
+  else rows=localArr('w3h');
+  const last=rows.slice(-8).reverse();
+  $('#khList').innerHTML=last.length?last.map(x=>`<div class="wish"><b>${esc(x[1])}</b>
+    <small>${esc(fTime(x[0]))} · ${esc(x[4]||'QR')}</small></div>`).join(''):'<p class="hint-txt">Belum ada check-in.</p>';
+}
+async function handleScan(raw,method){
+  method=method||'QR';
+  let key='',code='';
+  try{const u=new URL(raw,location.href);key=u.searchParams.get('key')||'';code=u.searchParams.get('code')||''}catch(e){}
+  if(!key&&String(raw).indexOf('|')>-1){const p=String(raw).split('|');key=p[1]||'';code=p[2]||''}
+  if(!key){scanShow('QR tidak dikenali — minta QR tiket tamu atau pakai input manual.','bad');beep(false);return}
+  const g=findGuest(key),nm=g?g[1]:key;
+  const r=await post({type:'checkin',adminKey:C.adminKey,key,code,mode:method});
+  if(r==='ok'){scanShow('✓ '+nm+' — check-in berhasil','ok');beep(true);reloadAdmin()}
+  else if(r==='dup'){scanShow('⚠ '+nm+' sudah check-in sebelumnya','warn');beep(false)}
+  else if(r==='notfound'){scanShow('Tamu tidak terdaftar: '+key,'bad');beep(false)}
+  else if(r==='forbidden'){scanShow('Kunci admin salah','bad');beep(false)}
+  else if(r==='local'){
+    const a=localArr('w3h');
+    if(a.some(x=>nk(x[2])===nk(key))){scanShow('⚠ '+nm+' sudah check-in sebelumnya','warn');beep(false)}
+    else{
+      a.push([new Date().toISOString(),nm,key,code||'',method]);
+      localStorage.setItem('w3h',JSON.stringify(a));
+      scanShow('✓ '+nm+' — check-in berhasil (uji coba lokal)','ok');beep(true);reloadAdmin();
+    }
+  }
+  else{scanShow('Gagal: '+r,'bad');beep(false)}
+}
+$('#scanStart').onclick=async()=>{
+  if(!('BarcodeDetector' in window)){$('#scanNote').textContent='⚠ Browser ini belum mendukung pemindaian QR. Gunakan Chrome/Edge Android terbaru, atau check-in manual di bawah.';return}
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    const v=$('#qrVideo');v.srcObject=stream;v.style.display='block';
+    await v.play();
+    const det=new window.BarcodeDetector({formats:['qr_code']});
+    $('#scanStart').style.display='none';$('#scanStop').style.display='';
+    $('#scanNote').textContent='Arahkan kamera ke QR tiket tamu…';
+    scanTimer=setInterval(async()=>{
+      if(Date.now()-scanCool<2500)return;
+      try{
+        const cs=await det.detect(v);
+        if(cs.length){scanCool=Date.now();handleScan(cs[0].rawValue,'QR')}
+      }catch(e){}
+    },450);
+  }catch(e){
+    $('#scanNote').textContent='⚠ Kamera tidak dapat dibuka ('+e.message+'). Butuh hosting HTTPS & izin kamera. Pakai input manual di bawah.';
+  }
+};
+function stopScan(){
+  clearInterval(scanTimer);scanTimer=null;
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  const v=$('#qrVideo');v.srcObject=null;v.style.display='none';
+  $('#scanStart').style.display='';$('#scanStop').style.display='none';
+  $('#scanNote').textContent='';
+}
+$('#scanStop').onclick=stopScan;
+$('#scanManBtn').onclick=()=>{
+  const v=$('#scanMan').value.trim();
+  if(!v){toast('Ketik nama atau kunci tamu');return}
+  const g=findGuestInput(v);
+  if(!g){scanShow('Tamu tidak ditemukan: '+v,'bad');beep(false);return}
+  $('#scanMan').value='';
+  handleScan('W3|'+g[2]+'|'+g[3],'Manual');
+};
+
+/* ---------- INISIALISASI ---------- */
+fillStatic();
+$$('.reveal').forEach(el=>io.observe(el));
+tick();setInterval(tick,1000);
+setTheme(localStorage.getItem('w3theme')||'hutan');
+setDark(localStorage.getItem('w3dark')==='1');
+if(!C.music)$('#musicBtn').style.display='none';
+if(G.name&&G.key)loadQrLib(drawTiket);
+loadWishes();
+if(isAdmin){
+  window.__opened=true;
+  document.body.classList.add('opened');
+  $('#cover').classList.add('hide');
+  $('#adminPanel').classList.add('on');
+  reloadAdmin();
+  if(C.adminKey==='ganti-kunci-ini')toast('⚠ Ganti adminKey default di CONFIG & ADMIN di Apps Script!',6000);
+}else if(ADMIN){
+  toast('Kunci admin salah');
+}
+</script>
+<script type="module">
+/* ================= HUTAN DONGENG 3D (Three.js) ================= */
+const wrap=document.getElementById('sceneWrap'),canvas=document.getElementById('scene'),hero=document.getElementById('hero');
+let THREE=null;
+try{THREE=await import('https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.min.js')}catch(err){}
+if(!THREE){
+  document.body.classList.add('no3d');
+  const lc=document.getElementById('loadChip');if(lc)lc.remove();
+}else{
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v)),lerp=(a,b,t)=>a+(b-a)*t;
+
+/* ---------- PALET & TARGET WARNA ---------- */
+const PAL={
+  hutan:{skyT:0x2f4a52,skyM:0xf2b56a,skyB:0x9db06a,fog:0xe6c087,sun:0xffd9a0,sunI:2.15,hSky:0xbcd8ff,hGnd:0x5c7a3d,hI:.85,fire:.95},
+  senja:{skyT:0x3d3552,skyM:0xf59a5a,skyB:0x8a7a52,fog:0xdba978,sun:0xffc27a,sunI:2.05,hSky:0xd8c2ff,hGnd:0x4c5a34,hI:.8,fire:1.15},
+  sakura:{skyT:0x4a3550,skyM:0xf6b8a8,skyB:0xa8b08a,fog:0xecc3a0,sun:0xffd7c2,sunI:1.95,hSky:0xffd8e4,hGnd:0x5c7040,hI:.85,fire:1.0}
+};
+const NIGHT={skyT:0x0b1526,skyM:0x16273f,skyB:0x0a1119,fog:0x0d1622,sun:0x9fb6ff,sunI:1.05,hSky:0x2b3f6b,hGnd:0x0c1208,hI:.5,fire:1.5};
+let themeName=document.body.dataset.theme||'hutan';
+if(!PAL[themeName])themeName='hutan';
+let dk=document.body.classList.contains('dark')?1:0,dkT=dk;
+const KEYS=['skyT','skyM','skyB','fog','sun','hSky','hGnd'];
+const CX={},TN={},_nc=new THREE.Color();
+for(const k of KEYS){CX[k]=new THREE.Color();TN[k]=new THREE.Color()}
+let curFire,curSunI,curHI,tgtFire,tgtSunI,tgtHI;
+function envSnap(instant){
+  const p=PAL[themeName]||PAL.hutan;
+  for(const k of KEYS){TN[k].setHex(p[k]).lerp(_nc.setHex(NIGHT[k]),dkT);if(instant)CX[k].copy(TN[k])}
+  tgtFire=lerp(p.fire,NIGHT.fire,dkT);tgtSunI=lerp(p.sunI,NIGHT.sunI,dkT);tgtHI=lerp(p.hI,NIGHT.hI,dkT);
+  if(instant){curFire=tgtFire;curSunI=tgtSunI;curHI=tgtHI}
+}
+envSnap(true);
+
+/* ---------- RENDERER & SCENE ---------- */
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.06;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+let PR=Math.min(devicePixelRatio||1,1.6);
+renderer.setPixelRatio(PR);
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0xe6c087,26,85);scene.fog.color.copy(CX.fog);
+const cam=new THREE.PerspectiveCamera(55,1,.1,300);
+const look=new THREE.Vector3(0,1.35,-1.2);
+let yaw=1.52,pitch=.30;
+let introP=window.__opened?1:0;
+
+/* ---------- TEKSTUR (canvas) ---------- */
+const texRefresh=[];
+function makeCanvasTex(w,h,draw){
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
+  const paint=()=>draw(c.getContext('2d'));
+  paint();texRefresh.push(()=>{paint();t.needsUpdate=true});
+  return t;
+}
+const woodT=makeCanvasTex(256,256,x=>{
+  x.fillStyle='#a97c4e';x.fillRect(0,0,256,256);
+  for(let i=0;i<70;i++){x.globalAlpha=.1+Math.random()*.18;x.fillStyle=Math.random()<.5?'#8a5f36':'#c49a68';x.fillRect(Math.random()*256,0,1+Math.random()*3,256)}
+  x.globalAlpha=1;
+  for(let i=0;i<9;i++){x.strokeStyle='rgba(90,58,30,.32)';x.lineWidth=1.4;x.beginPath();const px=Math.random()*256;x.moveTo(px,0);for(let y=0;y<=256;y+=32)x.lineTo(px+Math.sin(y*.05+i)*4,y);x.stroke()}
+});
+woodT.wrapS=woodT.wrapT=THREE.RepeatWrapping;
+const grassT=makeCanvasTex(64,64,x=>{
+  x.fillStyle='#cfd8bc';x.fillRect(0,0,64,64);
+  for(let i=0;i<420;i++){x.fillStyle='rgba(70,100,52,'+(.15+Math.random()*.3)+')';x.fillRect(Math.random()*64,Math.random()*64,1.6,2.6)}
+});
+grassT.wrapS=grassT.wrapT=THREE.RepeatWrapping;grassT.repeat.set(30,30);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>texRefresh.forEach(f=>f()));
+
+/* ---------- LANGIT, MATAHARI, KABUT CAHAYA ---------- */
+const skyMat=new THREE.ShaderMaterial({
+  side:THREE.BackSide,depthWrite:false,
+  uniforms:{uT:{value:CX.skyT.clone()},uM:{value:CX.skyM.clone()},uB:{value:CX.skyB.clone()}},
+  vertexShader:'varying vec3 vP;void main(){vP=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+  fragmentShader:'uniform vec3 uT;uniform vec3 uM;uniform vec3 uB;varying vec3 vP;void main(){float h=vP.y;vec3 c=h>0.?mix(uM,uT,pow(h,.75)):mix(uM,uB,pow(-h,.6));gl_FragColor=vec4(c,1.);}'
+});
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(120,32,18),skyMat));
+const glowT=makeCanvasTex(256,256,x=>{
+  const g=x.createRadialGradient(128,128,0,128,128,128);
+  g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.25,'rgba(255,236,180,.85)');
+  g.addColorStop(.6,'rgba(255,190,110,.22)');g.addColorStop(1,'rgba(255,180,100,0)');
+  x.fillStyle=g;x.fillRect(0,0,256,256);
+});
+const sunSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:glowT,blending:THREE.AdditiveBlending,depthWrite:false,fog:false,transparent:true}));
+sunSpr.position.set(7,10,-48);sunSpr.scale.set(26,26,1);scene.add(sunSpr);
+const beamMat=new THREE.MeshBasicMaterial({color:0xffd9a0,transparent:true,opacity:.05,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,fog:false});
+for(const bp of [[5.6,-.55],[8.2,.45],[2.4,-.2]]){
+  const b=new THREE.Mesh(new THREE.PlaneGeometry(26,60),beamMat);
+  b.position.set(bp[0],16,-30);b.rotation.z=bp[1];scene.add(b);
+}
+
+/* ---------- TANAH & LAPANGAN ---------- */
+function groundH(x,z){
+  const r=Math.hypot(x,z),f=clamp((r-6.5)/6,0,1);
+  return (Math.sin(x*.55)*Math.cos(z*.5)*.2+Math.sin(x*1.3+z*.7)*.1)*f;
+}
+{
+  const gGeo=new THREE.PlaneGeometry(120,120,120,120);gGeo.rotateX(-Math.PI/2);
+  const pos=gGeo.attributes.position,col=[];
+  const cA=new THREE.Color(0x7aa058),cB=new THREE.Color(0x4f6c3c),tmp=new THREE.Color();
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),z=pos.getZ(i);
+    pos.setY(i,groundH(x,z));
+    tmp.copy(cA).lerp(cB,clamp(.5+.5*Math.sin(x*.4+1.3)*Math.cos(z*.35),0,1)*(.45+.3*Math.random()));
+    col.push(tmp.r,tmp.g,tmp.b);
+  }
+  gGeo.computeVertexNormals();
+  gGeo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+  const gMat=new THREE.MeshStandardMaterial({map:grassT,vertexColors:true,roughness:.95,metalness:0});
+  const ground=new THREE.Mesh(gGeo,gMat);ground.receiveShadow=true;scene.add(ground);
+}
+
+/* ---------- MATERIAL KAYU, BUNGA, DAUN ---------- */
+const wood=new THREE.MeshStandardMaterial({map:woodT,roughness:.8,metalness:0});
+const woodDark=new THREE.MeshStandardMaterial({map:woodT,color:0xb08a60,roughness:.85,metalness:0});
+const FLOWERS=[0xf7dfe8,0xffffff,0xffe9b0,0xeec3c8,0xf2c5d4,0xfff3d6];
+const flowerMats=FLOWERS.map(cl=>new THREE.MeshStandardMaterial({color:cl,roughness:.7,metalness:0,flatShading:true}));
+const leafMat=new THREE.MeshStandardMaterial({color:0x4a7a42,roughness:.8,metalness:0,flatShading:true});
+function bloom(g,x,y,z,sc){
+  const m=flowerMats[(Math.random()*flowerMats.length)|0];
+  const f=new THREE.Mesh(new THREE.IcosahedronGeometry((.05+Math.random()*.04)*sc,0),m);
+  f.position.set(x+(Math.random()-.5)*.26*sc,y+Math.random()*.22*sc,z+(Math.random()-.5)*.22*sc);
+  f.castShadow=true;g.add(f);
+}
+function leaves(g,x,y,z,sc){
+  const l=new THREE.Mesh(new THREE.IcosahedronGeometry(.055*sc,0),leafMat);
+  l.scale.set(.6,.28,1.3);l.rotation.set(Math.random()*3,Math.random()*3,Math.random()*3);
+  l.position.set(x+(Math.random()-.5)*.3*sc,y+Math.random()*.14*sc,z+(Math.random()-.5)*.24*sc);
+  g.add(l);
+}
+function bouquet(g,x,y,z,sc){
+  for(let i=0;i<9;i++)bloom(g,x,y,z,sc);
+  for(let i=0;i<6;i++)leaves(g,x,y,z,sc);
+}
+
+/* ---------- ALTAR KAYU ---------- */
+const altar=new THREE.Group();altar.position.set(0,0,-4.2);scene.add(altar);
+for(const sx of [-1.05,1.05]){
+  const p=new THREE.Mesh(new THREE.CylinderGeometry(.09,.12,2.6,10),wood);
+  p.position.set(sx,1.3,0);p.castShadow=true;altar.add(p);
+  const cap=new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.08,10),woodDark);
+  cap.position.set(sx,2.62,0);cap.castShadow=true;altar.add(cap);
+}
+const arch=new THREE.Mesh(new THREE.TorusGeometry(1.05,.055,8,30,Math.PI),wood);
+arch.position.set(0,2.6,0);arch.castShadow=true;altar.add(arch);
+const bar=new THREE.Mesh(new THREE.BoxGeometry(2.1,.1,.12),wood);
+bar.position.set(0,2.28,0);bar.castShadow=true;altar.add(bar);
+for(let i=0;i<=14;i++){
+  const a=Math.PI*i/14,ax=Math.cos(a)*1.05,ay=2.6+Math.sin(a)*1.05;
+  bloom(altar,ax,ay,(Math.random()-.5)*.12,1);
+  if(i%2===0)leaves(altar,ax,ay-.09,0,.9);
+}
+const signT=makeCanvasTex(256,160,x=>{
+  x.fillStyle='#b98a58';x.fillRect(0,0,256,160);
+  for(let i=0;i<26;i++){x.globalAlpha=.08+Math.random()*.14;x.fillStyle=Math.random()<.5?'#8a5f36':'#d3a874';x.fillRect(Math.random()*256,0,2+Math.random()*5,160)}
+  x.globalAlpha=1;x.strokeStyle='rgba(80,48,22,.5)';x.lineWidth=6;x.strokeRect(3,3,250,154);
+  x.fillStyle='#3a2410';x.font='64px "Great Vibes",cursive';x.textAlign='center';x.textBaseline='middle';
+  x.fillText('R & A',128,86);
+});
+const signMat=new THREE.MeshStandardMaterial({map:signT,roughness:.8,metalness:0});
+const sign=new THREE.Mesh(new THREE.BoxGeometry(.8,.5,.05),[wood,wood,wood,wood,signMat,signMat]);
+sign.position.set(0,1.85,0);sign.castShadow=true;altar.add(sign);
+for(const hx of [-.3,.3]){
+  const st=new THREE.Mesh(new THREE.CylinderGeometry(.008,.008,.18,6),woodDark);
+  st.position.set(hx,2.19,0);altar.add(st);
+}
+for(const px of [-1.55,1.55]){
+  const ped=new THREE.Mesh(new THREE.CylinderGeometry(.3,.38,.85,10),wood);
+  ped.position.set(px,.42,1.1);ped.castShadow=true;altar.add(ped);
+  bouquet(altar,px,.95,1.1,1.15);
+}
+const rug=new THREE.Mesh(new THREE.PlaneGeometry(1.25,6.2),new THREE.MeshStandardMaterial({color:0x7fa65c,roughness:.95,metalness:0}));
+rug.rotation.x=-Math.PI/2;rug.position.set(0,.03,3.6);rug.receiveShadow=true;altar.add(rug);
+
+/* ---------- KURSI KAYU ---------- */
+function makeChair(){
+  const g=new THREE.Group();
+  const seat=new THREE.Mesh(new THREE.BoxGeometry(.52,.055,.5),wood);
+  seat.position.y=.48;seat.castShadow=true;seat.receiveShadow=true;g.add(seat);
+  for(const lp of [[-.21,-.2],[.21,-.2],[-.21,.2],[.21,.2]]){
+    const l=new THREE.Mesh(new THREE.CylinderGeometry(.026,.032,.48,8),woodDark);
+    l.position.set(lp[0],.24,lp[1]);l.castShadow=true;g.add(l);
+  }
+  for(const bx of [-.21,.21]){
+    const b=new THREE.Mesh(new THREE.CylinderGeometry(.024,.028,.6,8),woodDark);
+    b.position.set(bx,.78,.22);b.castShadow=true;g.add(b);
+  }
+  for(const by of [.66,.8,.94]){
+    const s=new THREE.Mesh(new THREE.BoxGeometry(.44,.07,.032),wood);
+    s.position.set(0,by,.22);s.castShadow=true;g.add(s);
+  }
+  return g;
+}
+for(const cx of [-.98,.98])for(const cz of [-.2,.9,2,3.1]){
+  const ch=makeChair();ch.position.set(cx,0,cz);ch.rotation.y=(Math.random()-.5)*.05;scene.add(ch);
+}
+
+/* ---------- PAPAN PETUNJUK ARAH (interaktif) ---------- */
+const post=new THREE.Group();post.position.set(2.6,0,.9);scene.add(post);
+const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.085,2.45,10),wood);
+pole.position.y=1.22;pole.castShadow=true;post.add(pole);
+const knob=new THREE.Mesh(new THREE.SphereGeometry(.09,10,8),woodDark);
+knob.position.y=2.48;post.add(knob);
+const arrShape=new THREE.Shape();
+arrShape.moveTo(0,-.1);arrShape.lineTo(.72,-.1);arrShape.lineTo(.72,-.17);arrShape.lineTo(.95,0);
+arrShape.lineTo(.72,.17);arrShape.lineTo(.72,.1);arrShape.lineTo(0,.1);arrShape.closePath();
+const arrGeo=new THREE.ExtrudeGeometry(arrShape,{depth:.05,bevelEnabled:false});
+function labelTex(txt){
+  const t=makeCanvasTex(256,56,x=>{
+    x.fillStyle='#a9764a';x.fillRect(0,0,256,56);
+    for(let i=0;i<26;i++){x.strokeStyle='rgba(60,32,10,'+(.05+Math.random()*.08)+')';x.beginPath();const y=Math.random()*56;x.moveTo(0,y);x.lineTo(256,y+(Math.random()*6-3));x.stroke()}
+    x.strokeStyle='rgba(70,40,15,.5)';x.lineWidth=3;x.strokeRect(1.5,1.5,253,53);
+    x.fillStyle='#2e1d0c';x.font='700 25px Nunito,sans-serif';x.textAlign='center';x.textBaseline='middle';
+    x.fillText(txt,128,30);
+  });
+  t.anisotropy=4;return t;
+}
+const ARROWS=[[2.15,-.55,'Cerita Kami'],[1.75,2.4,'Lokasi Acara'],[1.35,4.15,'Buku Tamu']];
+for(const ad of ARROWS){
+  const g=new THREE.Group();g.position.y=ad[0];g.rotation.y=ad[1];post.add(g);
+  const a=new THREE.Mesh(arrGeo,wood);a.castShadow=true;g.add(a);
+  const lm=new THREE.MeshStandardMaterial({map:labelTex(ad[2]),roughness:.78,metalness:0});
+  const p1=new THREE.Mesh(new THREE.PlaneGeometry(.64,.14),lm);p1.position.set(.42,0,.03);p1.castShadow=true;g.add(p1);
+  const p2=new THREE.Mesh(new THREE.PlaneGeometry(.64,.14),lm);p2.position.set(.42,0,-.03);p2.rotation.y=Math.PI;g.add(p2);
+}
+const hit=new THREE.Mesh(new THREE.BoxGeometry(2.6,2.75,2.6),new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false}));
+hit.position.y=1.3;post.add(hit);
+
+/* ---------- POHON ---------- */
+const treeCols=[0x3f6b3a,0x4a7a42,0x35592f,0x568a48,0x2f4f2a];
+const treeMats=treeCols.map(c=>new THREE.MeshStandardMaterial({color:c,roughness:.9,flatShading:true}));
+const treeMat=i=>treeMats[i%treeMats.length];
+function makeTree(x,z,s,pine){
+  const g=new THREE.Group();g.position.set(x,groundH(x,z),z);
+  const tr=new THREE.Mesh(new THREE.CylinderGeometry(.13*s,.2*s,1.5*s,7),woodDark);
+  tr.position.y=.75*s;tr.castShadow=true;g.add(tr);
+  if(pine){
+    for(let i=0;i<3;i++){
+      const c=new THREE.Mesh(new THREE.ConeGeometry((1.15-.28*i)*s,(1.3-.12*i)*s,8),treeMat(i));
+      c.position.y=(1.45+.78*i)*s;c.castShadow=true;g.add(c);
+    }
+  }else{
+    for(let i=0;i<3;i++){
+      const f=new THREE.Mesh(new THREE.IcosahedronGeometry((.95-.18*i)*s,0),treeMat(i));
+      f.position.set((Math.random()-.5)*.7*s,(1.75+.6*i)*s,(Math.random()-.5)*.7*s);
+      f.rotation.set(Math.random()*3,Math.random()*3,Math.random()*3);
+      f.castShadow=true;g.add(f);
+    }
+  }
+  return g;
+}
+let placed=0,guard=0;
+while(placed<26&&guard++<500){
+  const r=9.5+Math.random()*11,a=Math.random()*Math.PI*2;
+  const x=Math.cos(a)*r,z=Math.sin(a)*r;
+  if(Math.abs(x)<2.8&&z>-2)continue;
+  if(Math.hypot(x-2.6,z-.9)<3)continue;
+  scene.add(makeTree(x,z,.8+Math.random()*.8,Math.random()<.35));placed++;
+}
+for(let i=0;i<14;i++){
+  const r=26+Math.random()*8,a=Math.random()*Math.PI*2;
+  scene.add(makeTree(Math.cos(a)*r,Math.sin(a)*r,1.4+Math.random()*1.1,true));
+}
+
+/* ---------- KUNANG-KUNANG (partikel) ---------- */
+const FF=150;
+const fpos=new Float32Array(FF*3),fph=new Float32Array(FF),fsp=new Float32Array(FF),fsz=new Float32Array(FF),fcol=new Float32Array(FF*3);
+const warm=[0xffe9a0,0xffdf8a,0xfff6c8,0xffd27a,0xe8ffa0],_fc=new THREE.Color();
+for(let i=0;i<FF;i++){
+  fpos[i*3]=(Math.random()-.5)*28;fpos[i*3+1]=.3+Math.random()*4.2;fpos[i*3+2]=(Math.random()-.5)*20;
+  fph[i]=Math.random();fsp[i]=.5+Math.random()*1.2;fsz[i]=1.2+Math.random()*2;
+  _fc.setHex(warm[(Math.random()*warm.length)|0]);
+  fcol[i*3]=_fc.r;fcol[i*3+1]=_fc.g;fcol[i*3+2]=_fc.b;
+}
+const fGeo=new THREE.BufferGeometry();
+fGeo.setAttribute('position',new THREE.BufferAttribute(fpos,3));
+fGeo.setAttribute('aPhase',new THREE.BufferAttribute(fph,1));
+fGeo.setAttribute('aSpeed',new THREE.BufferAttribute(fsp,1));
+fGeo.setAttribute('aSize',new THREE.BufferAttribute(fsz,1));
+fGeo.setAttribute('aColor',new THREE.BufferAttribute(fcol,3));
+const fMat=new THREE.ShaderMaterial({
+  uniforms:{uTime:{value:0},uFire:{value:curFire}},
+  vertexShader:'attribute float aPhase;attribute float aSpeed;attribute float aSize;attribute vec3 aColor;uniform float uTime;varying float vTw;varying vec3 vC;void main(){vC=aColor;vec3 p=position;p.x+=sin(uTime*(.35+aSpeed*.4)+aPhase*6.283)*.9;p.y+=sin(uTime*(.5+aSpeed*.5)+aPhase*4.0)*.5;p.z+=cos(uTime*(.4+aSpeed*.45)+aPhase*5.0)*.9;vTw=.55+.45*sin(uTime*(1.4+aSpeed*1.3)+aPhase*3.0);vec4 mv=modelViewMatrix*vec4(p,1.);gl_PointSize=min(aSize*(140./max(.1,-mv.z)),64.);gl_Position=projectionMatrix*mv;}',
+  fragmentShader:'uniform float uFire;varying float vTw;varying vec3 vC;void main(){vec2 uv=gl_PointCoord-.5;float d=length(uv);float a=smoothstep(.5,.08,d);float core=smoothstep(.22,0.,d);vec3 c=vC*(.6+core*1.6);gl_FragColor=vec4(c,a*vTw*uFire);}',
+  transparent:true,blending:THREE.AdditiveBlending,depthWrite:false
+});
+scene.add(new THREE.Points(fGeo,fMat));
+
+/* ---------- CAHAYA ---------- */
+const hemi=new THREE.HemisphereLight(CX.hSky.clone(),CX.hGnd.clone(),curHI);scene.add(hemi);
+const dir=new THREE.DirectionalLight(CX.sun.clone(),curSunI);
+dir.position.set(10,14,-20);dir.castShadow=true;
+dir.shadow.mapSize.set(1024,1024);
+dir.shadow.camera.left=-14;dir.shadow.camera.right=14;dir.shadow.camera.top=14;dir.shadow.camera.bottom=-14;
+dir.shadow.camera.near=1;dir.shadow.camera.far=70;dir.shadow.bias=-.0006;
+scene.add(dir);dir.target.position.set(0,1,-3);scene.add(dir.target);
+
+function applyEnv(){
+  skyMat.uniforms.uT.value.copy(CX.skyT);
+  skyMat.uniforms.uM.value.copy(CX.skyM);
+  skyMat.uniforms.uB.value.copy(CX.skyB);
+  scene.fog.color.copy(CX.fog);
+  hemi.color.copy(CX.hSky);hemi.groundColor.copy(CX.hGnd);hemi.intensity=curHI;
+  dir.color.copy(CX.sun);dir.intensity=curSunI;
+  sunSpr.material.color.copy(CX.sun);
+  fMat.uniforms.uFire.value=curFire;
+}
+applyEnv();
+
+/* ---------- KAMERA: PUTAR, SERET, KETUK ---------- */
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();
+let dragging=false,dragMoved=false,px0=0,py0=0,pxL=0,pyL=0,pType='',downT=0;
+canvas.addEventListener('pointerdown',e=>{
+  if(!window.__opened)return;
+  dragging=true;dragMoved=false;px0=pxL=e.clientX;py0=pyL=e.clientY;pType=e.pointerType;downT=performance.now();
+  try{canvas.setPointerCapture(e.pointerId)}catch(_e){}
+  canvas.classList.add('drag');
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-pxL,dy=e.clientY-pyL;pxL=e.clientX;pyL=e.clientY;
+  if(Math.abs(e.clientX-px0)+Math.abs(e.clientY-py0)>9)dragMoved=true;
+  yaw=clamp(yaw-dx*.005,.15,2.9);
+  if(pType==='mouse')pitch=clamp(pitch+dy*.003,-.05,.45);
+});
+function endDrag(e){
+  if(!dragging)return;
+  dragging=false;canvas.classList.remove('drag');
+  if(!dragMoved&&performance.now()-downT<800&&window.__opened){
+    const r=canvas.getBoundingClientRect();
+    ndc.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
+    ray.setFromCamera(ndc,cam);
+    if(ray.intersectObjects([hit],false).length&&window.App)window.App.openMenu();
+  }
+}
+canvas.addEventListener('pointerup',endDrag);
+canvas.addEventListener('pointercancel',()=>{dragging=false;canvas.classList.remove('drag')});
+
+/* ---------- PETUNJUK "KETUK PAPAN" ---------- */
+const hintEl=document.getElementById('spHint'),hintPt=new THREE.Vector3(2.6,2.95,.9);
+let heroVis=true,hintOn=false,hintHalf=150;
+new IntersectionObserver(es=>{heroVis=es[0].isIntersecting},{threshold:0}).observe(hero);
+function updHint(){
+  if(!hintEl)return;
+  let want=false;
+  if(heroVis&&window.__opened&&!(window.App&&window.App.menuOpen)){
+    const r=wrap.getBoundingClientRect();
+    const v=hintPt.clone().project(cam);
+    if(v.z<1){
+      const px=r.left+(v.x*.5+.5)*r.width,py=r.top+(-v.y*.5+.5)*r.height;
+      hintEl.style.left=clamp(px,hintHalf+8,innerWidth-hintHalf-8)+'px';
+      hintEl.style.top=clamp(py,54,innerHeight-40)+'px';want=true;
+    }
+  }
+  if(want&&!hintOn)hintHalf=hintEl.offsetWidth/2||150;
+  if(want!==hintOn){hintOn=want;hintEl.classList.toggle('on',want)}
+}
+
+/* ---------- UKURAN ---------- */
+function resize(){
+  const w=wrap.clientWidth||innerWidth,h=wrap.clientHeight||innerHeight;
+  renderer.setPixelRatio(PR);renderer.setSize(w,h,false);
+  cam.aspect=w/h;cam.updateProjectionMatrix();
+}
+resize();
+addEventListener('resize',resize);
+/* ---------- PETA 3D MINI (Lokasi Acara) ---------- */
+const mwrap=document.querySelector('.mapwrap'),mcanvas=document.getElementById('mapCanvas');
+let mR=null,mScene=null,mCam=null,mHe=null,mDe=null,mReady=false,mActive=false,mYaw=.6,mDragging=false,mDragX=0,mPin=null,mRing=null,mW=0,mH=0;
+if(mwrap&&mcanvas){
+  new IntersectionObserver(es=>{if(es[0].isIntersecting){mActive=true;if(!mReady)initMap()}},{threshold:.12}).observe(mwrap);
+  mcanvas.addEventListener('pointerdown',e=>{
+    mDragging=true;mDragX=e.clientX;mcanvas.classList.add('drag');
+    try{mcanvas.setPointerCapture(e.pointerId)}catch(_e){}
+  });
+  mcanvas.addEventListener('pointermove',e=>{if(!mDragging)return;mYaw-=(e.clientX-mDragX)*.007;mDragX=e.clientX});
+  for(const ev of ['pointerup','pointercancel'])mcanvas.addEventListener(ev,()=>{mDragging=false;mcanvas.classList.remove('drag')});
+}
+function initMap(){
+  mReady=true;
+  mR=new THREE.WebGLRenderer({canvas:mcanvas,antialias:true});
+  mR.outputColorSpace=THREE.SRGBColorSpace;mR.toneMapping=THREE.ACESFilmicToneMapping;mR.toneMappingExposure=1.05;
+  mR.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
+  mR.shadowMap.enabled=true;mR.shadowMap.type=THREE.PCFSoftShadowMap;
+  mScene=new THREE.Scene();mScene.background=new THREE.Color(CX.skyM.getHex());
+  mScene.fog=new THREE.Fog(CX.fog.getHex(),17,36);
+  mCam=new THREE.PerspectiveCamera(38,1,.1,120);
+  mHe=new THREE.HemisphereLight(CX.hSky.getHex(),CX.hGnd.getHex(),.9);mScene.add(mHe);
+  mDe=new THREE.DirectionalLight(CX.sun.getHex(),2);
+  mDe.position.set(6,9,5);mDe.castShadow=true;mDe.shadow.mapSize.set(512,512);mScene.add(mDe);
+  const mGrass=new THREE.MeshStandardMaterial({color:0x739a52,roughness:.95,metalness:0});
+  const mDirt=new THREE.MeshStandardMaterial({color:0x8a5f3a,roughness:.95,flatShading:true,metalness:0});
+  const mRock=new THREE.MeshStandardMaterial({color:0x7d7f85,roughness:.9,flatShading:true,metalness:0});
+  const top=new THREE.Mesh(new THREE.CylinderGeometry(5,5.15,.6,26),mGrass);
+  top.position.y=-.3;top.receiveShadow=true;mScene.add(top);
+  const dirt=new THREE.Mesh(new THREE.CylinderGeometry(5.1,3.4,1.5,26),mDirt);
+  dirt.position.y=-1.35;mScene.add(dirt);
+  const rock=new THREE.Mesh(new THREE.ConeGeometry(3.2,2.6,9),mRock);
+  rock.position.y=-3.3;rock.rotation.y=.4;mScene.add(rock);
+  const pond=new THREE.Mesh(new THREE.CircleGeometry(1.15,26),new THREE.MeshStandardMaterial({color:0x6fb7d8,roughness:.25,metalness:.1,emissive:0x1c3b4d,emissiveIntensity:.4}));
+  pond.rotation.x=-Math.PI/2;pond.position.set(-2.1,.03,1.4);mScene.add(pond);
+  const path=new THREE.Mesh(new THREE.PlaneGeometry(.5,3.6),new THREE.MeshStandardMaterial({color:0xbfa478,roughness:.95,metalness:0}));
+  path.geometry.rotateX(-Math.PI/2);path.rotation.y=.35;path.position.set(-.5,.02,.15);path.receiveShadow=true;mScene.add(path);
+  const stoneMat=new THREE.MeshStandardMaterial({color:0x9a978f,roughness:.9,flatShading:true,metalness:0});
+  for(const sp of [[-1.55,.25,-.15],[-1.15,.2,.75],[-.75,.2,1.35]]){
+    const s=new THREE.Mesh(new THREE.CylinderGeometry(.19,.22,.07,8),stoneMat);
+    s.position.set(sp[0],sp[1]+.03,sp[2]);s.castShadow=true;mScene.add(s);
+  }
+  const mArch=new THREE.Group();mArch.position.set(.9,0,-1.6);mScene.add(mArch);
+  for(const sx of [-.55,.55]){
+    const p=new THREE.Mesh(new THREE.CylinderGeometry(.045,.06,1.1,8),wood);
+    p.position.set(sx,.55,0);p.castShadow=true;mArch.add(p);
+  }
+  const arc2=new THREE.Mesh(new THREE.TorusGeometry(.55,.03,7,24,Math.PI),wood);
+  arc2.position.y=1.1;arc2.castShadow=true;mArch.add(arc2);
+  for(let i=0;i<=9;i++){
+    const a=Math.PI*i/9;
+    bloom(mArch,Math.cos(a)*.55,1.1+Math.sin(a)*.55,(Math.random()-.5)*.08,1);
+  }
+  const mTrees=[[3.2,-2.5,.42,false],[-3.4,-1.8,.4,true],[-3.8,2.6,.34,false],[2.5,3.4,.36,true],[.4,-4,.44,false],[4.2,.6,.33,true],[-.2,4,.4,false]];
+  for(const mt of mTrees){
+    const tr=makeTree(mt[0],mt[1],mt[2],mt[3]);tr.position.y=0;mScene.add(tr);
+  }
+  const pinMat=new THREE.MeshStandardMaterial({color:0xc9a24b,roughness:.4,metalness:.15,emissive:0x3a2c08,emissiveIntensity:.5});
+  mPin=new THREE.Group();mPin.position.set(1.6,1,1.2);mScene.add(mPin);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.3,14,12),pinMat);head.position.y=.3;head.castShadow=true;mPin.add(head);
+  const tip=new THREE.Mesh(new THREE.ConeGeometry(.2,.6,12),pinMat);tip.position.y=-.18;mPin.add(tip);
+  mRing=new THREE.Mesh(new THREE.RingGeometry(.42,.5,26),new THREE.MeshBasicMaterial({color:0xc9a24b,transparent:true,opacity:.5,side:THREE.DoubleSide,depthWrite:false}));
+  mRing.rotation.x=-Math.PI/2;mRing.position.set(1.6,.06,1.2);mScene.add(mRing);
+  mCam.position.set(Math.sin(mYaw)*9.4,6.6,Math.cos(mYaw)*9.4);mCam.lookAt(0,.1,0);
+}
+function renderMap(dt){
+  const w=mwrap.clientWidth||320,h=mwrap.clientHeight||240;
+  if(w!==mW||h!==mH){mW=w;mH=h;mR.setSize(w,h,false);mCam.aspect=w/h;mCam.updateProjectionMatrix()}
+  if(!mDragging)mYaw+=dt*.12;
+  mCam.position.set(Math.sin(mYaw)*9.4,6.6,Math.cos(mYaw)*9.4);
+  mCam.lookAt(0,.1,0);
+  mPin.position.y=1.02+Math.sin(t*2.2)*.16;
+  mRing.scale.setScalar(1+Math.sin(t*2.2)*.18);
+  mRing.material.opacity=.38+Math.sin(t*2.2)*.18;
+  mScene.background.copy(CX.skyM);
+  mScene.fog.color.copy(CX.fog);
+  mHe.color.copy(CX.hSky);mHe.groundColor.copy(CX.hGnd);
+  mDe.color.copy(CX.sun);mDe.intensity=curSunI;
+  mR.render(mScene,mCam);
+}
+
+/* ---------- LOOP ANIMASI ---------- */
+let t=0,last=performance.now(),frames=0,dtSum=0,degraded=false,firstShown=false;
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,(now-last)/1000);last=now;t+=dt;
+  const k=Math.min(1,dt*3.2);
+  for(const key of KEYS)CX[key].lerp(TN[key],k);
+  dk=lerp(dk,dkT,k);
+  curFire=lerp(curFire,tgtFire,k);curSunI=lerp(curSunI,tgtSunI,k);curHI=lerp(curHI,tgtHI,k);
+  applyEnv();
+  if(window.__opened&&introP<1)introP=Math.min(1,introP+dt/3.4);
+  const ie=1-Math.pow(1-introP,3);
+  const rad=lerp(12.6,8.65,ie)+Math.sin(t*.32)*.14;
+  const yw=yaw+Math.sin(t*.12)*.06;
+  cam.position.set(look.x+rad*Math.cos(yw)*Math.cos(pitch),Math.max(.95,look.y+rad*Math.sin(pitch)),look.z+rad*Math.sin(yw)*Math.cos(pitch));
+  cam.lookAt(look);
+  fMat.uniforms.uTime.value=t;
+  post.rotation.z=Math.sin(t*.7)*.012;
+  updHint();
+  if(heroVis&&!document.hidden)renderer.render(scene,cam);
+  if(!firstShown&&heroVis){
+    firstShown=true;document.body.classList.add('has3d');
+    const lc=document.getElementById('loadChip');
+    if(lc){lc.style.transition='opacity .6s';lc.style.opacity='0';setTimeout(()=>lc.remove(),700)}
+  }
+  if(mReady&&mActive&&!document.hidden)renderMap(dt);
+  frames++;
+  if(frames>30&&frames<=120)dtSum+=dt;
+  if(!degraded&&frames===120&&dtSum/90>.026){
+    degraded=true;PR=1;renderer.setPixelRatio(1);
+    renderer.setSize(wrap.clientWidth,wrap.clientHeight,false);
+    dir.castShadow=false;
+  }
+}
+requestAnimationFrame(loop);
+
+/* ---------- JEMBATAN KE SKRIP UTAMA ---------- */
+window.Scene3D={
+  ready:true,
+  onOpen(){if(introP>0)introP=0},
+  setDark(b){dkT=b?1:0},
+  setTheme(th){if(PAL[th]){themeName=th;envSnap(false)}}
+};
+}
+</script>
+</body>
+</html>
